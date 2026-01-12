@@ -39,8 +39,7 @@
       "target": [
         "nsis",
         "portable"
-      ],
-      "icon": "icon.ico"
+      ]
     },
     "linux": {
       "target": [
@@ -48,8 +47,7 @@
         "deb",
         "rpm"
       ],
-      "category": "Video",
-      "icon": "icon.png"
+      "category": "Video"
     },
     "nsis": {
       "oneClick": false,
@@ -57,10 +55,10 @@
     }
   },
   "dependencies": {
-    "electron": "^39.2.7",
     "obs-websocket-js": "^5.0.7"
   },
   "devDependencies": {
+    "electron": "^39.2.7",
     "electron-builder": "^26.4.0"
   }
 }
