@@ -1,5 +1,5 @@
 // OBS Remote Control Application
-const OBSWebSocket = window.OBSWebSocket;
+let OBSWebSocket = null;
 let obs = null;
 let isConnected = false;
 let isStudioMode = false;
@@ -40,9 +40,18 @@ const elements = {
 
 // Initialize
 function init() {
+  // Check if OBS WebSocket library is loaded
+  if (typeof window.OBSWebSocket === 'undefined') {
+    console.error('OBS WebSocket library not loaded!');
+    alert('Error: OBS WebSocket library failed to load. Please check your internet connection and reload the page.');
+    return;
+  }
+  
+  OBSWebSocket = window.OBSWebSocket;
   obs = new OBSWebSocket();
   setupEventListeners();
   loadSettings();
+  console.log('OBS Remote Control initialized successfully');
 }
 
 // Setup event listeners
@@ -74,6 +83,11 @@ function loadSettings() {
 
 // Connection handling
 async function handleConnect() {
+  if (!obs) {
+    alert('OBS WebSocket client not initialized. Please reload the page.');
+    return;
+  }
+  
   if (isConnected) {
     await disconnect();
   } else {
@@ -83,15 +97,19 @@ async function handleConnect() {
 
 async function connect() {
   try {
+    console.log('Attempting to connect to OBS...');
     updateConnectionStatus('connecting', 'Connecting...');
+    elements.connectBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Connecting...';
     elements.connectBtn.disabled = true;
 
     const host = elements.wsHost.value || 'localhost';
     const port = elements.wsPort.value || '4455';
     const password = elements.wsPassword.value || '';
 
+    console.log(`Connecting to ws://${host}:${port}`);
     await obs.connect(`ws://${host}:${port}`, password);
     
+    console.log('Connection successful!');
     isConnected = true;
     updateConnectionStatus('connected', 'Connected');
     elements.connectBtn.innerHTML = '<i class="fas fa-plug"></i> Disconnect';
@@ -104,23 +122,47 @@ async function connect() {
   } catch (error) {
     console.error('Connection failed:', error);
     updateConnectionStatus('disconnected', 'Connection Failed');
+    elements.connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
     elements.connectBtn.disabled = false;
-    alert(`Failed to connect to OBS: ${error.message}`);
+    
+    // Provide more detailed error message
+    let errorMessage = 'Failed to connect to OBS';
+    if (error.message) {
+      errorMessage += ': ' + error.message;
+    }
+    if (error.code === 'ECONNREFUSED') {
+      errorMessage += '\n\nMake sure:\n• OBS Studio is running\n• WebSocket server is enabled in OBS\n• Host and port are correct';
+    }
+    alert(errorMessage);
   }
 }
 
 async function disconnect() {
   try {
-    await obs.disconnect();
+    console.log('Disconnecting from OBS...');
+    if (obs && isConnected) {
+      await obs.disconnect();
+    }
     isConnected = false;
     updateConnectionStatus('disconnected', 'Disconnected');
     elements.connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
     elements.connectBtn.classList.remove('btn-danger');
     elements.connectBtn.classList.add('btn-primary');
+    elements.connectBtn.disabled = false;
     clearIntervals();
     resetUI();
+    console.log('Disconnected successfully');
   } catch (error) {
     console.error('Disconnect error:', error);
+    // Still reset UI even if disconnect fails
+    isConnected = false;
+    updateConnectionStatus('disconnected', 'Disconnected');
+    elements.connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+    elements.connectBtn.classList.remove('btn-danger');
+    elements.connectBtn.classList.add('btn-primary');
+    elements.connectBtn.disabled = false;
+    clearIntervals();
+    resetUI();
   }
 }
 
@@ -156,6 +198,25 @@ async function initializeOBSConnection() {
 }
 
 function setupOBSEventListeners() {
+  // Connection events
+  obs.on('ConnectionClosed', () => {
+    console.log('Connection to OBS closed');
+    isConnected = false;
+    updateConnectionStatus('disconnected', 'Disconnected');
+    elements.connectBtn.innerHTML = '<i class="fas fa-plug"></i> Connect';
+    elements.connectBtn.classList.remove('btn-danger');
+    elements.connectBtn.classList.add('btn-primary');
+    elements.connectBtn.disabled = false;
+    clearIntervals();
+    resetUI();
+  });
+  
+  obs.on('ConnectionError', (error) => {
+    console.error('Connection error:', error);
+    updateConnectionStatus('disconnected', 'Connection Error');
+    alert('Lost connection to OBS: ' + (error.message || 'Unknown error'));
+  });
+  
   // Scene events
   obs.on('CurrentProgramSceneChanged', (data) => {
     currentScene = data.sceneName;
