@@ -370,7 +370,7 @@ function saveCustomLayoutPreset() {
     const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
     const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
 
-    const id = name.trim().toLowerCase().replace(/\s+/g, '-');
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     if (!id) return;
     if (['expanded', 'compact', '__custom'].includes(id)) {
       notifyUser('Preset name is reserved.');
@@ -394,7 +394,11 @@ function saveCustomLayoutPreset() {
 function deleteSelectedLayoutPreset() {
   if (!elements.layoutPresetSelect) return;
   const selectedId = elements.layoutPresetSelect.value;
-  if (!selectedId || DEFAULT_LAYOUT_PRESETS[selectedId]) {
+  if (!selectedId || selectedId === '__custom') {
+    notifyUser('Select a saved preset to delete.');
+    return;
+  }
+  if (DEFAULT_LAYOUT_PRESETS[selectedId]) {
     notifyUser('Default presets cannot be deleted.');
     return;
   }
