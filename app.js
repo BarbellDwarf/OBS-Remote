@@ -43,6 +43,12 @@ class OBSWebSocketWrapper {
   }
 }
 
+// Audio meter constants
+const MIN_DB = -60;  // Minimum dB level (silent/very quiet)
+const MAX_DB = 0;    // Maximum dB level (peak/clipping)
+const DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
+const PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
+
 let obs = null;
 let isConnected = false;
 let isStudioMode = false;
@@ -553,18 +559,18 @@ function updateAudioMeter(inputName, levelsMul) {
   
   // Convert linear magnitude to dB (logarithmic scale)
   // Professional audio meters use dB scale for better visualization
-  // dB = 20 * log10(magnitude), typically ranges from -60dB (quiet) to 0dB (peak)
-  const dB = magnitude > 0 ? 20 * Math.log10(magnitude) : -60;
+  // dB = 20 * log10(magnitude), typically ranges from MIN_DB (quiet) to MAX_DB (peak)
+  const dB = magnitude > 0 ? 20 * Math.log10(magnitude) : MIN_DB;
   console.log(`[updateAudioMeter] "${inputName}" magnitude: ${magnitude.toFixed(3)}, dB: ${dB.toFixed(1)}`);
   
-  // Map dB range (-60 to 0) to meter bars (0 to totalBars)
-  // -60dB or below = 0% (silent)
+  // Map dB range (MIN_DB to MAX_DB) to meter bars (0 to totalBars)
+  // MIN_DB or below = 0% (silent)
   // -40dB = ~30% (quiet)
   // -20dB = ~65% (typical speech)
-  // -5dB = ~90% (loud)
-  // 0dB = 100% (peak/clipping)
+  // PEAK_THRESHOLD_DB (-5dB) = ~90% (loud)
+  // MAX_DB (0dB) = 100% (peak/clipping)
   const totalBars = bars.length;
-  const dbNormalized = Math.max(0, Math.min(1, (dB + 60) / 60)); // Normalize -60dB to 0dB => 0.0 to 1.0
+  const dbNormalized = Math.max(0, Math.min(1, (dB - MIN_DB) / DB_RANGE)); // Normalize MIN_DB to MAX_DB => 0.0 to 1.0
   const activeCount = Math.round(dbNormalized * totalBars);
   console.log(`[updateAudioMeter] "${inputName}" lighting ${activeCount}/${totalBars} bars (${(dbNormalized * 100).toFixed(0)}%)`);
   
@@ -572,9 +578,8 @@ function updateAudioMeter(inputName, levelsMul) {
   bars.forEach((bar, index) => {
     if (index < activeCount) {
       bar.classList.add('active');
-      // Peak indicator (red) for levels above -5dB (very loud, near clipping)
-      // -5dB is about 90% of the meter range
-      if (dB > -5) {
+      // Peak indicator (red) for levels above PEAK_THRESHOLD_DB (very loud, near clipping)
+      if (dB > PEAK_THRESHOLD_DB) {
         bar.classList.add('peak');
       } else {
         bar.classList.remove('peak');
