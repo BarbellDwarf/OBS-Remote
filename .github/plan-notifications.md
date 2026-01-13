@@ -17,7 +17,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 ## Notification Triggers (v1)
 - Connection lifecycle: connect success, authentication failure, disconnect/unexpected disconnect, reconnect attempt success/fail.
 - Streaming: start/stop success, failure to start/stop, warning when streaming is active while recording is off (informational).
-- Recording: start/stop/pause/resume success, failure to start/stop, disk-space/permission failure message.
+- Recording: start/stop/pause/resume success, failure to start/stop, disk space/permission failure message.
 - Scene/transition: scene switch confirmation, transition triggered, transition failure.
 - Health: dropped frames > threshold, bitrate < threshold, CPU > threshold (defaults: 2% dropped frames, <2500 kbps bitrate, >85% CPU); only once per 30s unless the state clears.
 - Settings: connection details saved/cleared.
