@@ -19,7 +19,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Streaming: start/stop success, failure to start/stop, warning when streaming is active while recording is off (informational).
 - Recording: start/stop/pause/resume success, failure to start/stop, disk-space/permission failure message.
 - Scene/transition: scene switch confirmation, transition triggered, transition failure.
-- Health: dropped frames > threshold, bitrate < threshold, CPU > threshold (defaults: 2% dropped frames, <2500 Kbps bitrate, >85% CPU); only once per 30s unless the state clears.
+- Health: dropped frames > threshold, bitrate < threshold, CPU > threshold (defaults: 2% dropped frames, <2500 kbps bitrate, >85% CPU); only once per 30s unless the state clears.
 - Settings: connection details saved/cleared.
 
 ## Delivery & UX Rules
@@ -32,7 +32,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 ## Settings & Controls
 - Toggle: “Show in-app notifications” (on by default).
 - Toggle: “Allow desktop notifications when unfocused” (off by default; gated behind Notification permission prompt).
-- Toggle thresholds for health alerts (dropped frames %, bitrate Kbps floor, CPU %).
+- Toggle thresholds for health alerts (dropped frames %, bitrate kbps floor, CPU %).
 - Clear all notifications control (in-app only).
 
 ## Technical Approach
