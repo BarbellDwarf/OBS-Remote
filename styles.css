@@ -821,3 +821,31 @@ body {
   background-color: var(--warning-color);
   color: #000;
 }
+
+/* Connection Selector */
+.connection-selector {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.connection-dropdown {
+  padding: 8px 12px;
+  background-color: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 13px;
+  min-width: 180px;
+  cursor: pointer;
+}
+
+.connection-dropdown:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.connection-dropdown option {
+  background-color: var(--panel-bg);
+  color: var(--text-primary);
+}

@@ -17,6 +17,17 @@
       </div>
       <div class="header-right">
         <div class="connection-panel">
+          <div class="connection-selector">
+            <select id="saved-connections" class="connection-dropdown">
+              <option value="">-- New Connection --</option>
+            </select>
+            <button id="save-connection-btn" class="btn-icon" title="Save Connection">
+              <i class="fas fa-save"></i>
+            </button>
+            <button id="delete-connection-btn" class="btn-icon" title="Delete Connection">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
           <input type="text" id="ws-host" placeholder="Host (e.g., localhost)" value="localhost">
           <input type="text" id="ws-port" placeholder="Port (e.g., 4455)" value="4455">
           <input type="password" id="ws-password" placeholder="Password (optional)">
@@ -78,8 +89,7 @@
 
       <!-- Center - Preview/Program -->
       <section class="center-content">
-        <!-- Studio mode toggle hidden - video preview not available via WebSocket -->
-        <div class="studio-mode-toggle" style="display: none;">
+        <div class="studio-mode-toggle">
           <label class="toggle-switch">
             <input type="checkbox" id="studio-mode-toggle">
             <span class="toggle-slider"></span>

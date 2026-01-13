@@ -78,7 +78,10 @@ const elements = {
   bitrateValue: document.getElementById('bitrate-value'),
   droppedFrames: document.getElementById('dropped-frames'),
   recordingsList: document.getElementById('recordings-list'),
-  refreshRecordings: document.getElementById('refresh-recordings')
+  refreshRecordings: document.getElementById('refresh-recordings'),
+  savedConnections: document.getElementById('saved-connections'),
+  saveConnectionBtn: document.getElementById('save-connection-btn'),
+  deleteConnectionBtn: document.getElementById('delete-connection-btn')
 };
 
 // Initialize
@@ -115,6 +118,7 @@ async function init() {
     console.log('OBS event forwarding setup');
     
     setupEventListeners();
+    loadConnectionsList();
     loadSettings();
     console.log('OBS Remote Control initialized successfully');
   } catch (error) {
@@ -133,9 +137,127 @@ function setupEventListeners() {
   elements.transitionBtn.addEventListener('click', performTransition);
   elements.transitionSelect.addEventListener('change', setCurrentTransition);
   elements.refreshRecordings.addEventListener('click', loadRecordings);
+  elements.savedConnections.addEventListener('change', loadSavedConnection);
+  elements.saveConnectionBtn.addEventListener('click', saveCurrentConnection);
+  elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
 }
 
-// Save/Load connection settings
+// Connection Management Functions
+function getSavedConnections() {
+  const connections = localStorage.getItem('obsConnections');
+  return connections ? JSON.parse(connections) : [];
+}
+
+function saveSavedConnections(connections) {
+  localStorage.setItem('obsConnections', JSON.stringify(connections));
+}
+
+function loadConnectionsList() {
+  const connections = getSavedConnections();
+  elements.savedConnections.innerHTML = '<option value="">-- New Connection --</option>';
+  
+  connections.forEach((conn, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.textContent = conn.name;
+    elements.savedConnections.appendChild(option);
+  });
+}
+
+function loadSavedConnection() {
+  const selectedIndex = elements.savedConnections.value;
+  if (selectedIndex === '') {
+    // New connection - clear fields
+    elements.wsHost.value = 'localhost';
+    elements.wsPort.value = '4455';
+    elements.wsPassword.value = '';
+    return;
+  }
+  
+  const connections = getSavedConnections();
+  const connection = connections[selectedIndex];
+  if (connection) {
+    elements.wsHost.value = connection.host;
+    elements.wsPort.value = connection.port;
+    // Decrypt password (simple base64 for obfuscation)
+    elements.wsPassword.value = connection.password ? atob(connection.password) : '';
+  }
+}
+
+function saveCurrentConnection() {
+  const host = elements.wsHost.value.trim();
+  const port = elements.wsPort.value.trim();
+  const password = elements.wsPassword.value;
+  
+  if (!host || !port) {
+    alert('Please enter host and port before saving.');
+    return;
+  }
+  
+  const connectionName = prompt('Enter a name for this connection:', `${host}:${port}`);
+  if (!connectionName) return;
+  
+  const connections = getSavedConnections();
+  
+  // Check if a connection with this name already exists
+  const existingIndex = connections.findIndex(c => c.name === connectionName);
+  
+  const newConnection = {
+    name: connectionName,
+    host: host,
+    port: port,
+    // Encrypt password (simple base64 for obfuscation - not truly secure but better than plaintext)
+    password: password ? btoa(password) : ''
+  };
+  
+  if (existingIndex >= 0) {
+    // Update existing
+    if (confirm('A connection with this name already exists. Update it?')) {
+      connections[existingIndex] = newConnection;
+    } else {
+      return;
+    }
+  } else {
+    // Add new
+    connections.push(newConnection);
+  }
+  
+  saveSavedConnections(connections);
+  loadConnectionsList();
+  
+  // Select the saved connection
+  const newIndex = connections.findIndex(c => c.name === connectionName);
+  elements.savedConnections.value = newIndex;
+  
+  alert('Connection saved successfully!');
+}
+
+function deleteCurrentConnection() {
+  const selectedIndex = elements.savedConnections.value;
+  if (selectedIndex === '') {
+    alert('Please select a connection to delete.');
+    return;
+  }
+  
+  const connections = getSavedConnections();
+  const connection = connections[selectedIndex];
+  
+  if (!confirm(`Delete connection "${connection.name}"?`)) {
+    return;
+  }
+  
+  connections.splice(selectedIndex, 1);
+  saveSavedConnections(connections);
+  loadConnectionsList();
+  
+  // Reset to new connection
+  elements.savedConnections.value = '';
+  loadSavedConnection();
+  
+  alert('Connection deleted successfully!');
+}
+
+// Legacy save/load functions (kept for backwards compatibility)
 function saveSettings() {
   const settings = {
     host: elements.wsHost.value,
