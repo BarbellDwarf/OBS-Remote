@@ -220,7 +220,7 @@ function showConnectionNameDialog(defaultValue, callback) {
   };
   
   // Handle keyboard
-  const handleKeyPress = (e) => {
+  const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSave();
@@ -234,15 +234,13 @@ function showConnectionNameDialog(defaultValue, callback) {
   const cleanup = () => {
     saveBtn.removeEventListener('click', handleSave);
     cancelBtn.removeEventListener('click', handleCancel);
-    input.removeEventListener('keypress', handleKeyPress);
-    document.removeEventListener('keydown', handleKeyPress);
+    document.removeEventListener('keydown', handleKeyDown);
   };
   
   // Add event listeners
   saveBtn.addEventListener('click', handleSave);
   cancelBtn.addEventListener('click', handleCancel);
-  input.addEventListener('keypress', handleKeyPress);
-  document.addEventListener('keydown', handleKeyPress);
+  document.addEventListener('keydown', handleKeyDown);
 }
 
 function saveCurrentConnection() {
@@ -802,13 +800,6 @@ function startAudioLevelMonitoring(inputName) {
   // Note: Audio levels are now handled via InputVolumeMeters event
   // This function is kept for backward compatibility but levels are updated via event
   console.log(`Audio level monitoring for ${inputName} will use InputVolumeMeters event`);
-}
-    } catch (error) {
-      // If we can't get mute status, clear the meter
-      const bars = meter.querySelectorAll('.meter-bar');
-      bars.forEach(bar => bar.classList.remove('active', 'peak'));
-    }
-  }, 100); // Update 10 times per second for smooth animation
 }
 
 // Streaming
