@@ -295,7 +295,8 @@ body {
   transition: all var(--transition-speed);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
+  justify-content: flex-start;
   background-color: var(--dark-bg);
 }
 
@@ -314,6 +315,7 @@ body {
   align-items: center;
   gap: 8px;
   font-size: 13px;
+  flex: 1;
 }
 
 .list-item-icon {
@@ -333,6 +335,71 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.scene-thumbnail {
+  width: 72px;
+  height: 40px;
+  border-radius: 4px;
+  background-color: var(--panel-bg);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scene-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.06) 37%, rgba(255,255,255,0.04) 63%);
+  background-size: 400% 100%;
+}
+
+.thumb-placeholder.loading {
+  animation: shimmer 1.4s ease infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+.thumb-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.thumb-controls .toggle-label {
+  font-size: 12px;
+}
+
+.thumb-interval-label {
+  color: var(--text-secondary);
+}
+
+#thumbnail-interval {
+  width: 70px;
+}
+
+.toggle-switch.compact {
+  transform: scale(0.9);
+  transform-origin: left center;
 }
 
 .source-item i {
