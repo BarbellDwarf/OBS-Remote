@@ -1,0 +1,64 @@
+{
+  "name": "obs-remote-control",
+  "version": "1.0.0",
+  "description": "Desktop application to control OBS remotely via WebSocket - Cross-platform (Windows & Linux)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "build:all": "electron-builder --win --linux"
+  },
+  "keywords": [
+    "obs",
+    "websocket",
+    "streaming",
+    "recording",
+    "remote-control",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "build": {
+    "appId": "com.obsremote.app",
+    "productName": "OBS Remote Control",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "styles.css",
+      "app.js",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm"
+      ],
+      "category": "Video"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "obs-websocket-js": "^5.0.7"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0"
+  }
+}
