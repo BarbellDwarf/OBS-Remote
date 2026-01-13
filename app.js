@@ -373,7 +373,7 @@ function saveCustomLayoutPreset() {
     const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     if (!id) return;
     if (['expanded', 'compact', '__custom'].includes(id)) {
-      notifyUser('Preset name is reserved.');
+      notifyUser('Preset name is reserved (expanded, compact). Choose another name.');
       return;
     }
 
@@ -395,7 +395,7 @@ function deleteSelectedLayoutPreset() {
   if (!elements.layoutPresetSelect) return;
   const selectedId = elements.layoutPresetSelect.value;
   if (!selectedId || selectedId === '__custom') {
-    notifyUser('Select a saved preset to delete.');
+    notifyUser('Only saved presets can be deleted. Select a saved preset first.');
     return;
   }
   if (DEFAULT_LAYOUT_PRESETS[selectedId]) {

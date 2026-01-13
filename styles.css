@@ -192,6 +192,7 @@ body {
 /* Main Content */
 .main-content {
   flex: 1;
+  display: flex;
   display: grid;
   grid-template-columns: var(--sidebar-left) 1fr var(--sidebar-right);
   overflow: hidden;
