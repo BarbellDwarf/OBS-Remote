@@ -115,6 +115,11 @@ const LAYOUT_PRESETS_KEY = 'obsLayoutPresets';
 const ACTIVE_LAYOUT_PRESET_KEY = 'obsActiveLayoutPreset';
 let layoutPresets = { ...DEFAULT_LAYOUT_PRESETS };
 
+const LAYOUT_LIMITS = {
+  min: 200,
+  max: 420
+};
+
 // Initialize
 async function init() {
   console.log('Initializing OBS Remote Control...');
@@ -239,8 +244,9 @@ function loadStoredLayoutPresets() {
     try {
       const parsed = JSON.parse(stored);
       Object.values(parsed || {}).forEach((preset) => {
-        if (preset && preset.id && preset.name) {
-          presets[preset.id] = { ...preset };
+        const sanitized = sanitizePreset(preset);
+        if (sanitized) {
+          presets[sanitized.id] = sanitized;
         }
       });
     } catch (err) {
@@ -283,6 +289,23 @@ function setDensityClass(density) {
   body.classList.add(density === 'compact' ? 'density-compact' : 'density-expanded');
 }
 
+function clampSidebar(value) {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return LAYOUT_LIMITS.min;
+  return Math.min(LAYOUT_LIMITS.max, Math.max(LAYOUT_LIMITS.min, parsed));
+}
+
+function sanitizePreset(preset) {
+  if (!preset || typeof preset !== 'object') return null;
+  const density = preset.density === 'compact' ? 'compact' : 'expanded';
+  const sidebarLeft = clampSidebar(preset.sidebarLeft || LAYOUT_LIMITS.min);
+  const sidebarRight = clampSidebar(preset.sidebarRight || LAYOUT_LIMITS.min);
+  const id = preset.id && typeof preset.id === 'string' ? preset.id : null;
+  const name = preset.name && typeof preset.name === 'string' ? preset.name : null;
+  if (!id || !name) return null;
+  return { id, name, density, sidebarLeft, sidebarRight };
+}
+
 function applyLayoutPreset(presetId) {
   if (!elements.layoutPresetSelect) return;
   if (presetId === '__custom') {
@@ -291,7 +314,7 @@ function applyLayoutPreset(presetId) {
     return;
   }
 
-  const preset = layoutPresets[presetId] || DEFAULT_LAYOUT_PRESETS.expanded;
+  const preset = sanitizePreset(layoutPresets[presetId]) || DEFAULT_LAYOUT_PRESETS.expanded;
   const density = preset.density || 'expanded';
   const leftWidth = preset.sidebarLeft || 280;
   const rightWidth = preset.sidebarRight || 300;
@@ -316,8 +339,8 @@ function applyLayoutPreset(presetId) {
 
 function applyLayoutFromInputs(markCustom) {
   const density = elements.layoutDensitySelect ? elements.layoutDensitySelect.value : 'expanded';
-  const leftWidth = elements.sidebarLeftWidth ? parseInt(elements.sidebarLeftWidth.value, 10) || 280 : 280;
-  const rightWidth = elements.sidebarRightWidth ? parseInt(elements.sidebarRightWidth.value, 10) || 300 : 300;
+  const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
+  const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
 
   document.documentElement.style.setProperty('--sidebar-left', `${leftWidth}px`);
   document.documentElement.style.setProperty('--sidebar-right', `${rightWidth}px`);
@@ -344,11 +367,15 @@ function saveCustomLayoutPreset() {
     if (!name) return;
 
     const density = elements.layoutDensitySelect ? elements.layoutDensitySelect.value : 'expanded';
-    const leftWidth = elements.sidebarLeftWidth ? parseInt(elements.sidebarLeftWidth.value, 10) || 280 : 280;
-    const rightWidth = elements.sidebarRightWidth ? parseInt(elements.sidebarRightWidth.value, 10) || 300 : 300;
+    const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
+    const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
 
     const id = name.trim().toLowerCase().replace(/\s+/g, '-');
     if (!id) return;
+    if (['expanded', 'compact', '__custom'].includes(id)) {
+      notifyUser('Preset name is reserved.');
+      return;
+    }
 
     layoutPresets[id] = {
       id,
@@ -368,7 +395,7 @@ function deleteSelectedLayoutPreset() {
   if (!elements.layoutPresetSelect) return;
   const selectedId = elements.layoutPresetSelect.value;
   if (!selectedId || DEFAULT_LAYOUT_PRESETS[selectedId]) {
-    alert('Default presets cannot be deleted.');
+    notifyUser('Default presets cannot be deleted.');
     return;
   }
   delete layoutPresets[selectedId];
@@ -391,6 +418,18 @@ function initializeLayoutPresets() {
   populateLayoutPresetSelect();
   const activePresetId = localStorage.getItem(ACTIVE_LAYOUT_PRESET_KEY) || 'expanded';
   applyLayoutPreset(layoutPresets[activePresetId] ? activePresetId : 'expanded');
+}
+
+function notifyUser(message) {
+  if (elements.statusText) {
+    const previous = elements.statusText.textContent;
+    elements.statusText.textContent = message;
+    setTimeout(() => {
+      elements.statusText.textContent = previous;
+    }, 3000);
+  } else {
+    alert(message);
+  }
 }
 
 // Custom dialog function (replaces prompt() which doesn't work in Electron renderer)

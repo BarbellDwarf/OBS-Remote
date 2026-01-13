@@ -259,7 +259,8 @@ body {
 
 /* Density modes */
 body.density-compact .sidebar,
-body.density-compact .center-content {
+body.density-compact .center-content,
+body.density-compact .main-content {
   gap: 8px;
 }
 
