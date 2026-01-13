@@ -68,7 +68,9 @@ const elements = {
   statusText: document.querySelector('.status-text'),
   scenesList: document.getElementById('scenes-list'),
   sourcesList: document.getElementById('sources-list'),
-  audioMixer: document.getElementById('audio-mixer'),
+  audioMixer: document.getElementById('audio-mixer'), // Legacy - will be removed
+  globalAudioMixer: document.getElementById('global-audio-mixer'),
+  sceneAudioMixer: document.getElementById('scene-audio-mixer'),
   streamBtn: document.getElementById('stream-btn'),
   recordBtn: document.getElementById('record-btn'),
   pauseRecordBtn: document.getElementById('pause-record-btn'),
@@ -485,6 +487,8 @@ function setupOBSEventListeners() {
     if (isStudioMode) {
       updateSceneIndicators();
     }
+    // Refresh audio mixer to show scene-specific audio
+    loadAudioSources();
   });
   
   obs.on('SceneListChanged', () => {
@@ -650,6 +654,8 @@ async function setScene(sceneName) {
       await obs.call('SetCurrentProgramScene', { sceneName });
       currentScene = sceneName;
       updateActiveScene();
+      // Refresh audio mixer when scene changes
+      await loadAudioSources();
     }
   } catch (error) {
     console.error('Failed to set scene:', error);
@@ -697,6 +703,13 @@ async function loadAudioSources() {
   try {
     const { inputs } = await obs.call('GetInputList');
     
+    // Get current scene to determine scene-specific sources
+    const { currentProgramSceneName } = await obs.call('GetCurrentProgramScene');
+    const { sceneItems } = await obs.call('GetSceneItemList', { sceneName: currentProgramSceneName });
+    
+    // Get list of source names in the current scene
+    const sceneSourceNames = new Set(sceneItems.map(item => item.sourceName));
+    
     // Filter for audio inputs - check if they have audio tracks
     const audioInputs = [];
     for (const input of inputs) {
@@ -714,26 +727,46 @@ async function loadAudioSources() {
             // Fallback to input data
             inputKind = input.inputKind || 'unknown';
           }
-          audioInputs.push({ ...input, inputKind });
+          
+          // Determine if this is in the current scene
+          const isInScene = sceneSourceNames.has(input.inputName);
+          
+          audioInputs.push({ ...input, inputKind, isInScene });
         }
       } catch (e) {
         // Input doesn't have audio or doesn't exist anymore
       }
     }
     
-    elements.audioMixer.innerHTML = '';
-    if (audioInputs.length === 0) {
-      elements.audioMixer.innerHTML = '<div class="empty-state">No audio sources available</div>';
-      return;
+    // Separate into global and scene-specific
+    const globalAudio = audioInputs.filter(input => !input.isInScene);
+    const sceneAudio = audioInputs.filter(input => input.isInScene);
+    
+    // Populate global audio mixer
+    elements.globalAudioMixer.innerHTML = '';
+    if (globalAudio.length === 0) {
+      elements.globalAudioMixer.innerHTML = '<div class="empty-state">No global audio sources</div>';
+    } else {
+      for (const input of globalAudio) {
+        const audioChannel = await createAudioChannel(input.inputName, input.inputKind);
+        elements.globalAudioMixer.appendChild(audioChannel);
+      }
     }
     
-    for (const input of audioInputs) {
-      const audioChannel = await createAudioChannel(input.inputName, input.inputKind);
-      elements.audioMixer.appendChild(audioChannel);
+    // Populate scene audio mixer
+    elements.sceneAudioMixer.innerHTML = '';
+    if (sceneAudio.length === 0) {
+      elements.sceneAudioMixer.innerHTML = '<div class="empty-state">No scene audio sources</div>';
+    } else {
+      for (const input of sceneAudio) {
+        const audioChannel = await createAudioChannel(input.inputName, input.inputKind);
+        elements.sceneAudioMixer.appendChild(audioChannel);
+      }
     }
   } catch (error) {
     console.error('Failed to load audio sources:', error);
-    elements.audioMixer.innerHTML = '<div class="empty-state">Failed to load audio sources</div>';
+    elements.globalAudioMixer.innerHTML = '<div class="empty-state">Failed to load audio sources</div>';
+    elements.sceneAudioMixer.innerHTML = '<div class="empty-state">Failed to load audio sources</div>';
   }
 }
 
