@@ -24,7 +24,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 
 ## Delivery & UX Rules
 - **In-app toasts** (stacked bottom-right): color-coded (success/info/warning/error), auto-dismiss after 4s; errors persist with a close button.
-- **System notifications** (HTML5 Notification API) are opt-in and only fire when the window is unfocused; mirror toast content but with shorter copy.
+- **System notifications** (Web Notifications API) are opt-in and only fire when the window is unfocused; mirror toast content but with shorter copy.
 - Debounce identical events within 1s to avoid spam; coalesce repeat health warnings into a single updated toast.
 - Include concise action context in the title (e.g., “Streaming started”, “Connection lost”).
 - Keep copy under ~80 characters; prefer verbs and plain language.
@@ -43,7 +43,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Wire OBS WebSocket events in `app.js` to the manager:
   - Connection/identification handlers → success/error toasts.
   - `StreamStateChanged`, `RecordStateChanged`, `SceneTransitionVideoEnded`, `CurrentProgramSceneChanged`, and health polling → mapped notifications.
-- Respect context isolation: surface notifications from preload-safe APIs only (no Node primitives in renderer).
+- Respect context isolation: surface notifications from preload-safe APIs only (contextBridge-exposed helpers and browser Notifications, not direct Node primitives in the renderer).
 - Add permission request flow for system notifications with graceful fallback to in-app toasts.
 
 ## Acceptance Criteria
