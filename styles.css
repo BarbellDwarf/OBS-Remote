@@ -192,7 +192,6 @@ body {
 /* Main Content */
 .main-content {
   flex: 1;
-  display: flex;
   display: grid;
   grid-template-columns: var(--sidebar-left) 1fr var(--sidebar-right);
   overflow: hidden;
@@ -263,6 +262,12 @@ body.density-compact .sidebar,
 body.density-compact .center-content,
 body.density-compact .main-content {
   gap: 8px;
+}
+
+body.density-expanded .sidebar,
+body.density-expanded .center-content,
+body.density-expanded .main-content {
+  gap: 12px;
 }
 
 body.density-compact .panel-header {
