@@ -243,7 +243,19 @@ It does NOT expose:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit issues or pull requests.
+Contributions are welcome! Please read our [Contributing Guidelines](.github/CONTRIBUTING.md) for details on:
+- Development setup and workflow
+- Coding standards and conventions
+- Testing guidelines
+- Pull request process
+
+### For GitHub Copilot Users
+
+This repository includes custom instructions and MCP configurations to enhance your development experience:
+- **Copilot Instructions**: See [`.github/copilot-instructions.md`](.github/copilot-instructions.md)
+- **MCP Setup**: See [`.github/MCP_SETUP.md`](.github/MCP_SETUP.md) for extending Copilot capabilities
+
+These configurations help Copilot understand our project structure, coding standards, and OBS WebSocket patterns.
 
 ## License
 
