@@ -197,6 +197,11 @@
             <span id="stream-time" class="stat-value">--:--:--</span>
           </div>
           <div class="stat-item">
+            <i class="fas fa-video"></i>
+            <span class="stat-label">Recording Time:</span>
+            <span id="record-time" class="stat-value">--:--:--</span>
+          </div>
+          <div class="stat-item">
             <i class="fas fa-tachometer-alt"></i>
             <span class="stat-label">FPS:</span>
             <span id="fps-value" class="stat-value">--</span>
@@ -217,9 +222,43 @@
             <span id="bitrate-value" class="stat-value">-- kbps</span>
           </div>
           <div class="stat-item">
+            <i class="fas fa-upload"></i>
+            <span class="stat-label">Bytes Sent:</span>
+            <span id="bytes-sent" class="stat-value">--</span>
+          </div>
+          <div class="stat-item">
+            <i class="fas fa-download"></i>
+            <span class="stat-label">Bytes Received:</span>
+            <span id="bytes-received" class="stat-value">--</span>
+          </div>
+          <div class="stat-item">
+            <i class="fas fa-heartbeat"></i>
+            <span class="stat-label">Network Health:</span>
+            <span id="network-health" class="stat-value health-neutral">--</span>
+          </div>
+          <div class="stat-item">
+            <i class="fas fa-wave-square"></i>
+            <span class="stat-label">Drop Trend:</span>
+            <span id="drop-trend" class="stat-value">--</span>
+          </div>
+          <div class="stat-item">
             <i class="fas fa-chart-line"></i>
             <span class="stat-label">Dropped Frames:</span>
             <span id="dropped-frames" class="stat-value">0 (0%)</span>
+          </div>
+        </div>
+        <div class="stats-settings">
+          <div class="settings-item">
+            <label for="stats-interval-input">Stats Interval (ms)</label>
+            <input type="number" id="stats-interval-input" min="250" step="250" value="1000">
+          </div>
+          <div class="settings-item">
+            <label for="clip-threshold-input">Clip Alert (dB)</label>
+            <input type="number" id="clip-threshold-input" min="-30" max="0" step="1" value="-5">
+          </div>
+          <div class="settings-item">
+            <label for="drop-alert-input">Drop Alert (%)</label>
+            <input type="number" id="drop-alert-input" min="0" max="50" step="0.5" value="5">
           </div>
         </div>
       </section>

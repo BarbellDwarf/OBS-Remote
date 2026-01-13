@@ -667,6 +667,56 @@ body {
   color: var(--text-primary);
 }
 
+.health-good {
+  color: var(--success-color);
+}
+.health-warn {
+  color: var(--warning-color);
+}
+.health-bad {
+  color: var(--danger-color);
+}
+.health-neutral {
+  color: var(--text-secondary);
+}
+
+.stats-settings {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.settings-item label {
+  color: var(--text-secondary);
+}
+
+.settings-item input {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--text-primary);
+}
+
+.clip-indicator {
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--danger-color);
+  display: none;
+}
+
+.audio-channel.clipping .clip-indicator {
+  display: inline-block;
+}
 /* Audio Mixer */
 .audio-mixer {
   display: flex;

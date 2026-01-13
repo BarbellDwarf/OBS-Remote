@@ -54,6 +54,19 @@ let isConnected = false;
 let isStudioMode = false;
 let currentScene = null;
 let statsInterval = null;
+let statsConfig = {
+  intervalMs: 1000,
+  clipThresholdDb: -5,
+  dropAlertPercent: 5,
+  dropWarnPercent: 1.5,
+  congestionWarnPercent: 10,
+  congestionBadPercent: 25
+};
+let dropHistory = [];
+let lastStreamBytes = null;
+let lastBytesTimestamp = null;
+let streamStartTime = null;
+let recordStartTime = null;
 let audioLevelIntervals = {};
 let syncInterval = null; // For bidirectional sync
 let isUserInteractingWithTransition = false; // Prevent sync from overwriting user changes
@@ -83,11 +96,19 @@ const elements = {
   transitionSelect: document.getElementById('transition-select'),
   transitionDuration: document.getElementById('transition-duration'),
   streamTime: document.getElementById('stream-time'),
+  recordTime: document.getElementById('record-time'),
   fpsValue: document.getElementById('fps-value'),
   cpuValue: document.getElementById('cpu-value'),
   memoryValue: document.getElementById('memory-value'),
   bitrateValue: document.getElementById('bitrate-value'),
   droppedFrames: document.getElementById('dropped-frames'),
+  bytesSent: document.getElementById('bytes-sent'),
+  bytesReceived: document.getElementById('bytes-received'),
+  networkHealth: document.getElementById('network-health'),
+  dropTrend: document.getElementById('drop-trend'),
+  statsIntervalInput: document.getElementById('stats-interval-input'),
+  clipThresholdInput: document.getElementById('clip-threshold-input'),
+  dropAlertInput: document.getElementById('drop-alert-input'),
   savedConnections: document.getElementById('saved-connections'),
   saveConnectionBtn: document.getElementById('save-connection-btn'),
   deleteConnectionBtn: document.getElementById('delete-connection-btn'),
@@ -848,6 +869,7 @@ async function createAudioChannel(inputName, inputKind = 'unknown') {
       <div class="audio-meter" data-input="${inputName}">
         ${Array(20).fill('<div class="meter-bar"></div>').join('')}
       </div>
+      <div class="clip-indicator" aria-live="polite">CLIP</div>
     `;
     
     // Setup event listeners
