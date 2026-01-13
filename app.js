@@ -72,6 +72,7 @@ const elements = {
   streamBtn: document.getElementById('stream-btn'),
   recordBtn: document.getElementById('record-btn'),
   pauseRecordBtn: document.getElementById('pause-record-btn'),
+  virtualCamBtn: document.getElementById('virtualcam-btn'),
   studioModeToggle: document.getElementById('studio-mode-toggle'),
   singlePreview: document.getElementById('single-preview'),
   studioPreview: document.getElementById('studio-preview'),
@@ -84,11 +85,13 @@ const elements = {
   memoryValue: document.getElementById('memory-value'),
   bitrateValue: document.getElementById('bitrate-value'),
   droppedFrames: document.getElementById('dropped-frames'),
-  recordingsList: document.getElementById('recordings-list'),
-  refreshRecordings: document.getElementById('refresh-recordings'),
   savedConnections: document.getElementById('saved-connections'),
   saveConnectionBtn: document.getElementById('save-connection-btn'),
-  deleteConnectionBtn: document.getElementById('delete-connection-btn')
+  deleteConnectionBtn: document.getElementById('delete-connection-btn'),
+  collectionsList: document.getElementById('collections-list'),
+  refreshCollections: document.getElementById('refresh-collections'),
+  profilesList: document.getElementById('profiles-list'),
+  refreshProfiles: document.getElementById('refresh-profiles')
 };
 
 // Initialize
@@ -140,13 +143,15 @@ function setupEventListeners() {
   if (elements.streamBtn) elements.streamBtn.addEventListener('click', toggleStreaming);
   if (elements.recordBtn) elements.recordBtn.addEventListener('click', toggleRecording);
   if (elements.pauseRecordBtn) elements.pauseRecordBtn.addEventListener('click', pauseRecording);
+  if (elements.virtualCamBtn) elements.virtualCamBtn.addEventListener('click', toggleVirtualCamera);
   if (elements.studioModeToggle) elements.studioModeToggle.addEventListener('change', toggleStudioMode);
   if (elements.transitionBtn) elements.transitionBtn.addEventListener('click', performTransition);
   if (elements.transitionSelect) elements.transitionSelect.addEventListener('change', setCurrentTransition);
-  if (elements.refreshRecordings) elements.refreshRecordings.addEventListener('click', loadRecordings);
   if (elements.savedConnections) elements.savedConnections.addEventListener('change', loadSavedConnection);
   if (elements.saveConnectionBtn) elements.saveConnectionBtn.addEventListener('click', saveCurrentConnection);
   if (elements.deleteConnectionBtn) elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
+  if (elements.refreshCollections) elements.refreshCollections.addEventListener('click', loadSceneCollections);
+  if (elements.refreshProfiles) elements.refreshProfiles.addEventListener('click', loadProfiles);
 }
 
 // Connection Management Functions
@@ -438,9 +443,12 @@ async function initializeOBSConnection() {
       loadScenes(),
       loadTransitions(),
       loadAudioSources(),
+      loadSceneCollections(),
+      loadProfiles(),
       getStudioModeStatus(),
       getStreamingStatus(),
-      getRecordingStatus()
+      getRecordingStatus(),
+      getVirtualCameraStatus()
     ]);
     
     // Start stats polling
@@ -1110,29 +1118,143 @@ function updateStats(stats) {
   elements.droppedFrames.textContent = `${droppedFrames} (${droppedPercent}%)`;
 }
 
-// Recordings
-async function loadRecordings() {
+// Virtual Camera Control
+async function toggleVirtualCamera() {
   try {
-    // OBS WebSocket doesn't provide a direct way to list recordings
-    // This is a placeholder implementation
-    elements.recordingsList.innerHTML = `
-      <div class="empty-state">
-        <p>Recordings list not available via WebSocket</p>
-        <small>Check OBS recordings folder manually</small>
-      </div>
-    `;
+    const { outputActive } = await obs.call('GetVirtualCamStatus');
     
-    // Optionally, you could implement file system access if running in Electron
-    // with appropriate permissions
+    if (outputActive) {
+      await obs.call('StopVirtualCam');
+      elements.virtualCamBtn.innerHTML = '<i class="fas fa-video"></i> Start Virtual Camera';
+      elements.virtualCamBtn.classList.remove('btn-success');
+      elements.virtualCamBtn.classList.add('btn-secondary');
+    } else {
+      await obs.call('StartVirtualCam');
+      elements.virtualCamBtn.innerHTML = '<i class="fas fa-video-slash"></i> Stop Virtual Camera';
+      elements.virtualCamBtn.classList.remove('btn-secondary');
+      elements.virtualCamBtn.classList.add('btn-success');
+    }
   } catch (error) {
-    console.error('Failed to load recordings:', error);
+    console.error('Failed to toggle virtual camera:', error);
+    alert('Failed to toggle virtual camera: ' + error.message);
   }
+}
+
+async function getVirtualCameraStatus() {
+  try {
+    const { outputActive } = await obs.call('GetVirtualCamStatus');
+    if (outputActive) {
+      elements.virtualCamBtn.innerHTML = '<i class="fas fa-video-slash"></i> Stop Virtual Camera';
+      elements.virtualCamBtn.classList.remove('btn-secondary');
+      elements.virtualCamBtn.classList.add('btn-success');
+    } else {
+      elements.virtualCamBtn.innerHTML = '<i class="fas fa-video"></i> Start Virtual Camera';
+      elements.virtualCamBtn.classList.remove('btn-success');
+      elements.virtualCamBtn.classList.add('btn-secondary');
+    }
+  } catch (error) {
+    console.error('Failed to get virtual camera status:', error);
+  }
+}
+
+// Scene Collections
+async function loadSceneCollections() {
+  try {
+    const { sceneCollections, currentSceneCollectionName } = await obs.call('GetSceneCollectionList');
+    
+    if (!elements.collectionsList) return;
+    
+    elements.collectionsList.innerHTML = '';
+    sceneCollections.forEach(collection => {
+      const item = document.createElement('div');
+      item.className = 'list-item' + (collection === currentSceneCollectionName ? ' active' : '');
+      item.innerHTML = `
+        <span class="list-item-label">
+          <i class="fas fa-layer-group list-item-icon"></i>
+          ${collection}
+        </span>
+      `;
+      item.addEventListener('click', () => switchSceneCollection(collection));
+      elements.collectionsList.appendChild(item);
+    });
+  } catch (error) {
+    console.error('Failed to load scene collections:', error);
+    if (elements.collectionsList) {
+      elements.collectionsList.innerHTML = '<div class="empty-state">Failed to load collections</div>';
+    }
+  }
+}
+
+async function switchSceneCollection(collectionName) {
+  try {
+    await obs.call('SetCurrentSceneCollection', { sceneCollectionName: collectionName });
+    // Wait a moment for OBS to switch collections
+    setTimeout(async () => {
+      await loadSceneCollections();
+      await loadScenes();
+      await loadAudioSources();
+    }, 500);
+  } catch (error) {
+    console.error('Failed to switch scene collection:', error);
+    alert('Failed to switch scene collection: ' + error.message);
+  }
+}
+
+// Profiles
+async function loadProfiles() {
+  try {
+    const { profiles, currentProfileName } = await obs.call('GetProfileList');
+    
+    if (!elements.profilesList) return;
+    
+    elements.profilesList.innerHTML = '';
+    profiles.forEach(profile => {
+      const item = document.createElement('div');
+      item.className = 'list-item' + (profile === currentProfileName ? ' active' : '');
+      item.innerHTML = `
+        <span class="list-item-label">
+          <i class="fas fa-sitemap list-item-icon"></i>
+          ${profile}
+        </span>
+      `;
+      item.addEventListener('click', () => switchProfile(profile));
+      elements.profilesList.appendChild(item);
+    });
+  } catch (error) {
+    console.error('Failed to load profiles:', error);
+    if (elements.profilesList) {
+      elements.profilesList.innerHTML = '<div class="empty-state">Failed to load profiles</div>';
+    }
+  }
+}
+
+async function switchProfile(profileName) {
+  try {
+    await obs.call('SetCurrentProfile', { profileName: profileName });
+    // Wait a moment for OBS to switch profiles
+    setTimeout(async () => {
+      await loadProfiles();
+      await loadScenes();
+      await loadAudioSources();
+    }, 500);
+  } catch (error) {
+    console.error('Failed to switch profile:', error);
+    alert('Failed to switch profile: ' + error.message);
+  }
+}
+
+// Recordings (removed - not supported by WebSocket)
+async function loadRecordings() {
+  // OBS WebSocket doesn't provide a direct way to list recordings
+  // This function is kept for backwards compatibility but does nothing
+  console.log('Recordings list not available via OBS WebSocket');
 }
 
 // UI helpers
 function enableControls() {
   elements.streamBtn.disabled = false;
   elements.recordBtn.disabled = false;
+  if (elements.virtualCamBtn) elements.virtualCamBtn.disabled = false;
   elements.transitionSelect.disabled = false;
   elements.transitionDuration.disabled = false;
 }
@@ -1141,11 +1263,13 @@ function resetUI() {
   elements.scenesList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
   elements.sourcesList.innerHTML = '<div class="empty-state">Select a scene</div>';
   elements.audioMixer.innerHTML = '<div class="empty-state">No audio sources available</div>';
-  elements.recordingsList.innerHTML = '<div class="empty-state">No recordings found</div>';
+  if (elements.collectionsList) elements.collectionsList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
+  if (elements.profilesList) elements.profilesList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
   
   elements.streamBtn.disabled = true;
   elements.recordBtn.disabled = true;
   elements.pauseRecordBtn.disabled = true;
+  if (elements.virtualCamBtn) elements.virtualCamBtn.disabled = true;
   if (elements.transitionBtn) elements.transitionBtn.disabled = true;
   elements.transitionSelect.disabled = true;
   elements.transitionDuration.disabled = true;

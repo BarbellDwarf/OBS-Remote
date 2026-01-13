@@ -183,6 +183,9 @@
             <button id="pause-record-btn" class="btn btn-secondary" disabled>
               <i class="fas fa-pause"></i> Pause Recording
             </button>
+            <button id="virtualcam-btn" class="btn btn-secondary" disabled>
+              <i class="fas fa-video"></i> Start Virtual Camera
+            </button>
           </div>
         </div>
 
@@ -221,7 +224,7 @@
         </div>
       </section>
 
-      <!-- Right Sidebar - Audio Mixer -->
+      <!-- Right Sidebar - Audio Mixer & Collections -->
       <aside class="sidebar sidebar-right">
         <div class="panel">
           <div class="panel-header">
@@ -233,7 +236,40 @@
             </div>
           </div>
         </div>
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h2><i class="fas fa-layer-group"></i> Scene Collections</h2>
+            <button class="btn-icon" id="refresh-collections" title="Refresh">
+              <i class="fas fa-sync"></i>
+            </button>
+          </div>
+          <div class="panel-body">
+            <div id="collections-list" class="list-container">
+              <div class="empty-state">Not connected to OBS</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="panel">
+          <div class="panel-header">
+            <h2><i class="fas fa-sitemap"></i> Profiles</h2>
+            <button class="btn-icon" id="refresh-profiles" title="Refresh">
+              <i class="fas fa-sync"></i>
+            </button>
+          </div>
+          <div class="panel-body">
+            <div id="profiles-list" class="list-container">
+              <div class="empty-state">Not connected to OBS</div>
+            </div>
+          </div>
+        </div>
 
+        <!-- 
+          Recordings panel removed - OBS WebSocket doesn't provide recording list functionality
+          Code preserved for potential future use if WebSocket protocol adds this feature
+        -->
+        <!-- 
         <div class="panel">
           <div class="panel-header">
             <h2><i class="fas fa-folder-open"></i> Recordings</h2>
@@ -247,6 +283,7 @@
             </div>
           </div>
         </div>
+        -->
       </aside>
     </main>
   </div>
