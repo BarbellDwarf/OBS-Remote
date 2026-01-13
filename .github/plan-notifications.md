@@ -43,7 +43,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Wire OBS WebSocket events in `app.js` to the manager:
   - Connection/identification handlers → success/error toasts.
   - `StreamStateChanged`, `RecordStateChanged`, `SceneTransitionVideoEnded`, `CurrentProgramSceneChanged`, and health polling → mapped notifications.
-- Respect context isolation by using contextBridge-exposed helpers and browser Notifications. Avoid direct Node primitives in the renderer; deeper wiring details can live in the technical spec.
+- Respect context isolation by using contextBridge-exposed helpers and browser Notifications. Avoid direct Node primitives in the renderer; deeper wiring details can live in IMPLEMENTATION.md or a follow-up technical spec.
 - Add permission request flow for system notifications with graceful fallback to in-app toasts.
 
 ## Acceptance Criteria
