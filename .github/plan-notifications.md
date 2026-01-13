@@ -20,7 +20,9 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Recording: start/stop/pause/resume success, failure to start/stop, disk space/permission failure message.
 - Scene/transition: scene switch confirmation, transition triggered, transition failure.
 - Health:
-  - Thresholds: dropped frames > threshold, bitrate < threshold, CPU > threshold (planning examples: dropped frames >2%, bitrate <2500 kbps, CPU >85% — final defaults should live in config and stay editable).
+  - Thresholds: dropped frames > threshold, bitrate < threshold, CPU > threshold.
+    - Planning examples: dropped frames >2%, bitrate <2500 kbps, CPU >85%.
+    - Final defaults should live in config and stay editable.
   - Throttling: emit at most once per 30s per metric unless the state clears.
 - Settings: connection details saved/cleared.
 
@@ -44,7 +46,11 @@ Create a concise, non-intrusive notification experience that keeps users aware o
   - De-duplicates events via a simple key + timestamp map.
 - Wire OBS WebSocket events in `app.js` to the manager:
   - Connection/identification handlers → success/error toasts.
-  - `StreamStateChanged`, `RecordStateChanged`, `SceneTransitionVideoEnded`, `CurrentProgramSceneChanged`, and health polling → mapped notifications.
+  - `StreamStateChanged` → streaming notifications.
+  - `RecordStateChanged` → recording notifications.
+  - `SceneTransitionVideoEnded` → transition confirmations.
+  - `CurrentProgramSceneChanged` → scene change confirmations.
+  - Health polling → health alerts.
 - Respect context isolation by using contextBridge-exposed helpers and browser Notifications.
 - Avoid direct Node primitives in the renderer.
 - Document wiring details in an IMPLEMENTATION.md file or a follow-up technical spec.
