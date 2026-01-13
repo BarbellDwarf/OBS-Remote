@@ -697,7 +697,9 @@ function createSourceItem(item) {
   visibilityBtn.innerHTML = `<i class="fas fa-eye${item.sceneItemEnabled ? '' : '-slash'}"></i>`;
   visibilityBtn.onclick = (e) => {
     e.stopPropagation();
-    toggleSourceVisibility(item.sceneItemId, item.sourceName, !item.sceneItemEnabled, visibilityBtn, div);
+    // Read current visibility state from DOM instead of captured variable
+    const isCurrentlyVisible = div.classList.contains('visible');
+    toggleSourceVisibility(item.sceneItemId, item.sourceName, !isCurrentlyVisible, visibilityBtn, div);
   };
   
   div.appendChild(iconSpan);
