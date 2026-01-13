@@ -14,6 +14,7 @@ Snapshot of the planning state and roadmap for OBS Remote Control (updated: 2026
 - **Completed (enhancements)**: 0
 - **In progress**: 0
 - **Planned / not started**: 10
+- All 10 roadmap items from `README.md` are listed in the table below.
 
 | Roadmap Item | Status | Notes |
 | --- | --- | --- |
