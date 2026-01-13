@@ -19,7 +19,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Streaming: start/stop success, failure to start/stop, warning when streaming is active while recording is off (informational).
 - Recording: start/stop/pause/resume success, failure to start/stop, disk space/permission failure message.
 - Scene/transition: scene switch confirmation, transition triggered, transition failure.
-- Health: dropped frames > threshold, bitrate < threshold, CPU > threshold (defaults: 2% dropped frames, <2500 kbps bitrate, >85% CPU); only once per 30s unless the state clears.
+- Health: dropped frames > threshold, bitrate < threshold, CPU > threshold (defaults: 2% dropped frames, <2500 kbps bitrate, >85% CPU for planning—actual defaults should live in config and stay editable); only once per 30s unless the state clears.
 - Settings: connection details saved/cleared.
 
 ## Delivery & UX Rules
@@ -43,7 +43,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Wire OBS WebSocket events in `app.js` to the manager:
   - Connection/identification handlers → success/error toasts.
   - `StreamStateChanged`, `RecordStateChanged`, `SceneTransitionVideoEnded`, `CurrentProgramSceneChanged`, and health polling → mapped notifications.
-- Respect context isolation by using contextBridge-exposed helpers and browser Notifications. Avoid direct Node primitives in the renderer; deeper wiring details can live in IMPLEMENTATION.md or a follow-up technical spec.
+- Respect context isolation by using contextBridge-exposed helpers and browser Notifications. Avoid direct Node primitives in the renderer; deeper wiring details can live in the existing IMPLEMENTATION.md or a follow-up technical spec.
 - Add permission request flow for system notifications with graceful fallback to in-app toasts.
 
 ## Acceptance Criteria
