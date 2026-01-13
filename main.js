@@ -6,7 +6,10 @@ let OBSWebSocket;
 
 // Load OBS WebSocket in main process
 try {
-  OBSWebSocket = require('obs-websocket-js').default;
+  const obsws = require('obs-websocket-js');
+  OBSWebSocket = obsws.default;
+  // Export EventSubscription for use in connection
+  exports.EventSubscription = obsws.EventSubscription;
   console.log('OBS WebSocket library loaded in main process');
 } catch (error) {
   console.error('Failed to load OBS WebSocket library:', error);
@@ -61,7 +64,17 @@ ipcMain.handle('obs:connect', async (event, url, password) => {
     if (!obs) {
       throw new Error('OBS instance not created');
     }
-    await obs.connect(url, password);
+    
+    // Import EventSubscription enum
+    const { EventSubscription } = require('obs-websocket-js');
+    
+    // Connect with InputVolumeMeters subscription
+    // InputVolumeMeters is high-volume and not included in EventSubscription.All by default
+    await obs.connect(url, password, {
+      eventSubscriptions: EventSubscription.All | EventSubscription.InputVolumeMeters,
+      rpcVersion: 1
+    });
+    
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message, code: error.code };

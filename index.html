@@ -236,6 +236,23 @@
     </main>
   </div>
 
+  <!-- Custom Dialog for Connection Name (prompt() replacement) -->
+  <div id="connection-name-dialog" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Save Connection</h3>
+      </div>
+      <div class="modal-body">
+        <label for="connection-name-input">Connection Name:</label>
+        <input type="text" id="connection-name-input" class="modal-input" placeholder="e.g., Studio PC">
+      </div>
+      <div class="modal-footer">
+        <button id="dialog-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="dialog-save-btn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

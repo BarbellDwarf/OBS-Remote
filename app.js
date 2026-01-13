@@ -185,6 +185,66 @@ function loadSavedConnection() {
   }
 }
 
+// Custom dialog function (replaces prompt() which doesn't work in Electron renderer)
+function showConnectionNameDialog(defaultValue, callback) {
+  const dialog = document.getElementById('connection-name-dialog');
+  const input = document.getElementById('connection-name-input');
+  const saveBtn = document.getElementById('dialog-save-btn');
+  const cancelBtn = document.getElementById('dialog-cancel-btn');
+  
+  // Set default value
+  input.value = defaultValue;
+  
+  // Show dialog
+  dialog.style.display = 'flex';
+  
+  // Focus input and select text
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 100);
+  
+  // Handle save
+  const handleSave = () => {
+    const value = input.value.trim();
+    dialog.style.display = 'none';
+    cleanup();
+    callback(value);
+  };
+  
+  // Handle cancel
+  const handleCancel = () => {
+    dialog.style.display = 'none';
+    cleanup();
+    callback(null);
+  };
+  
+  // Handle keyboard
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancel();
+    }
+  };
+  
+  // Cleanup function
+  const cleanup = () => {
+    saveBtn.removeEventListener('click', handleSave);
+    cancelBtn.removeEventListener('click', handleCancel);
+    input.removeEventListener('keypress', handleKeyPress);
+    document.removeEventListener('keydown', handleKeyPress);
+  };
+  
+  // Add event listeners
+  saveBtn.addEventListener('click', handleSave);
+  cancelBtn.addEventListener('click', handleCancel);
+  input.addEventListener('keypress', handleKeyPress);
+  document.addEventListener('keydown', handleKeyPress);
+}
+
 function saveCurrentConnection() {
   const host = elements.wsHost.value.trim();
   const port = elements.wsPort.value.trim();
@@ -195,42 +255,44 @@ function saveCurrentConnection() {
     return;
   }
   
-  const connectionName = prompt('Enter a name for this connection:', `${host}:${port}`);
-  if (!connectionName) return;
-  
-  const connections = getSavedConnections();
-  
-  // Check if a connection with this name already exists
-  const existingIndex = connections.findIndex(c => c.name === connectionName);
-  
-  const newConnection = {
-    name: connectionName,
-    host: host,
-    port: port,
-    // Encrypt password (simple base64 for obfuscation - not truly secure but better than plaintext)
-    password: password ? btoa(password) : ''
-  };
-  
-  if (existingIndex >= 0) {
-    // Update existing
-    if (confirm('A connection with this name already exists. Update it?')) {
-      connections[existingIndex] = newConnection;
+  // Show custom dialog (prompt() is not supported in Electron renderer)
+  showConnectionNameDialog(`${host}:${port}`, (connectionName) => {
+    if (!connectionName) return;
+    
+    const connections = getSavedConnections();
+    
+    // Check if a connection with this name already exists
+    const existingIndex = connections.findIndex(c => c.name === connectionName);
+    
+    const newConnection = {
+      name: connectionName,
+      host: host,
+      port: port,
+      // Encrypt password (simple base64 for obfuscation - not truly secure but better than plaintext)
+      password: password ? btoa(password) : ''
+    };
+    
+    if (existingIndex >= 0) {
+      // Update existing
+      if (confirm('A connection with this name already exists. Update it?')) {
+        connections[existingIndex] = newConnection;
+      } else {
+        return;
+      }
     } else {
-      return;
+      // Add new
+      connections.push(newConnection);
     }
-  } else {
-    // Add new
-    connections.push(newConnection);
-  }
-  
-  saveSavedConnections(connections);
-  loadConnectionsList();
-  
-  // Select the saved connection
-  const newIndex = connections.findIndex(c => c.name === connectionName);
-  elements.savedConnections.value = newIndex;
-  
-  alert('Connection saved successfully!');
+    
+    saveSavedConnections(connections);
+    loadConnectionsList();
+    
+    // Select the saved connection
+    const newIndex = connections.findIndex(c => c.name === connectionName);
+    elements.savedConnections.value = newIndex;
+    
+    alert('Connection saved successfully!');
+  });
 }
 
 function deleteCurrentConnection() {
@@ -427,6 +489,56 @@ function setupOBSEventListeners() {
   obs.on('StudioModeStateChanged', (data) => {
     isStudioMode = data.studioModeEnabled;
     updateStudioModeUI();
+  });
+  
+  // Audio level events (OBS WebSocket 5.x feature)
+  obs.on('InputVolumeMeters', (data) => {
+    // data.inputs is an array of {inputName, inputLevelsMul: [[channels], [channels], ...]}
+    if (data && data.inputs) {
+      data.inputs.forEach(input => {
+        updateAudioMeter(input.inputName, input.inputLevelsMul);
+      });
+    }
+  });
+}
+
+// Update audio meter with real OBS audio levels
+function updateAudioMeter(inputName, levelsMul) {
+  const meter = document.querySelector(`.audio-meter[data-input="${inputName}"]`);
+  if (!meter) return;
+  
+  const bars = meter.querySelectorAll('.meter-bar');
+  if (bars.length === 0) return;
+  
+  // levelsMul is an array of channel arrays: [[ch1_levels], [ch2_levels], ...]
+  // Each channel has 3 values: [magnitude, peak, inputLevel]
+  // We'll use the magnitude (index 0) from the first channel
+  if (!levelsMul || levelsMul.length === 0) {
+    // No audio data - clear meter
+    bars.forEach(bar => bar.classList.remove('active', 'peak'));
+    return;
+  }
+  
+  // Get magnitude from first channel (mono or left channel)
+  const magnitude = levelsMul[0][0]; // Range: 0.0 to 1.0
+  
+  // Convert to number of bars to light up (out of total bars)
+  const totalBars = bars.length;
+  const activeCount = Math.round(magnitude * totalBars);
+  
+  // Update meter bars
+  bars.forEach((bar, index) => {
+    if (index < activeCount) {
+      bar.classList.add('active');
+      // Peak indicator (red) for levels above 80%
+      if (index >= totalBars * 0.8) {
+        bar.classList.add('peak');
+      } else {
+        bar.classList.remove('peak');
+      }
+    } else {
+      bar.classList.remove('active', 'peak');
+    }
   });
 }
 
@@ -687,45 +799,10 @@ function percentToDb(percent) {
 }
 
 function startAudioLevelMonitoring(inputName) {
-  // IMPORTANT: OBS WebSocket 5.x API Limitation
-  // There is NO API endpoint to get real-time audio signal levels (VU meter data)
-  // GetInputVolume only returns the volume SETTING (slider position), not actual audio activity
-  // OBS displays real audio levels internally, but doesn't expose this data via WebSocket
-  
-  const meter = document.querySelector(`.audio-meter[data-input="${inputName}"]`);
-  if (!meter) return;
-  
-  // As a workaround, we show simulated activity based on mute status
-  // This is a limitation of the OBS WebSocket protocol, not this application
-  audioLevelIntervals[inputName] = setInterval(async () => {
-    try {
-      const { inputMuted } = await obs.call('GetInputMute', { inputName });
-      const bars = meter.querySelectorAll('.meter-bar');
-      
-      if (!inputMuted) {
-        // Show simulated activity for unmuted sources
-        // Add randomness to make it look like audio movement
-        const baseLevel = 6;
-        const randomVariation = Math.floor(Math.random() * 8);
-        const activeCount = Math.min(bars.length, baseLevel + randomVariation);
-        
-        bars.forEach((bar, index) => {
-          if (index < activeCount) {
-            bar.classList.add('active');
-            // Red peak indicators for levels above 80%
-            if (index > bars.length * 0.8) {
-              bar.classList.add('peak');
-            } else {
-              bar.classList.remove('peak');
-            }
-          } else {
-            bar.classList.remove('active', 'peak');
-          }
-        });
-      } else {
-        // Muted - clear the meter completely
-        bars.forEach(bar => bar.classList.remove('active', 'peak'));
-      }
+  // Note: Audio levels are now handled via InputVolumeMeters event
+  // This function is kept for backward compatibility but levels are updated via event
+  console.log(`Audio level monitoring for ${inputName} will use InputVolumeMeters event`);
+}
     } catch (error) {
       // If we can't get mute status, clear the meter
       const bars = meter.querySelectorAll('.meter-bar');

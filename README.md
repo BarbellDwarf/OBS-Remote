@@ -15,11 +15,13 @@ A modern, cross-platform desktop application for remotely controlling OBS (Open 
 
 ### 🎚️ Audio Control
 - Full audio mixer with all audio sources
-- Volume sliders with real-time adjustment
+- Volume sliders with real-time adjustment and bidirectional sync
 - Mute/unmute controls
-- Visual audio level indicators
-  - *Note: Actual audio signal levels not available via WebSocket*
-  - *Indicators show simulated activity for unmuted sources*
+- **✨ Real-time audio level meters**
+  - Uses OBS WebSocket 5.x InputVolumeMeters event
+  - Actual audio signal levels from OBS audio engine
+  - Updates ~50ms for smooth, responsive VU meters
+  - Matches OBS Studio's internal audio meters
 
 ### 📺 Studio Mode
 - Toggle studio mode on/off
