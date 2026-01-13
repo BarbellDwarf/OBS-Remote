@@ -20,7 +20,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 - Recording: start/stop/pause/resume success, failure to start/stop, disk space/permission failure message.
 - Scene/transition: scene switch confirmation, transition triggered, transition failure.
 - Health:
-  - Thresholds: dropped frames > threshold, bitrate < threshold, CPU > threshold (planning examples: dropped frames >2%, bitrate <2500 kbps, CPU >85%—final defaults should live in config and stay editable).
+  - Thresholds: dropped frames > threshold, bitrate < threshold, CPU > threshold (planning examples: dropped frames >2%, bitrate <2500 kbps, CPU >85% — final defaults should live in config and stay editable).
   - Throttling: emit at most once per 30s per metric unless the state clears.
 - Settings: connection details saved/cleared.
 
@@ -39,7 +39,7 @@ Create a concise, non-intrusive notification experience that keeps users aware o
 
 ## Technical Approach
 - Implement a small notification manager in the renderer that:
-  - Exposes `showToast(type, message, options)` and `showSystemNotification(type, message)` helpers.
+  - Exposes `showToast(type, message, options)` and `showSystemNotification(type, message, options)` helpers.
   - Maintains an in-memory list for stacked toasts with auto-dismiss timers.
   - De-duplicates events via a simple key + timestamp map.
 - Wire OBS WebSocket events in `app.js` to the manager:
