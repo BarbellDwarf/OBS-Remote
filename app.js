@@ -671,24 +671,34 @@ async function setScene(sceneName) {
 // Sources
 async function loadSceneSources(sceneName) {
   try {
-    const { sceneItems } = await obs.call('GetSceneItemList', { sceneName });
+    const [{ sceneItems }, { inputs }] = await Promise.all([
+      obs.call('GetSceneItemList', { sceneName }),
+      obs.call('GetInputList')
+    ]);
+    
+    const inputKindMap = new Map(inputs.map(input => [input.inputName, input.inputKind || '']));
     
     elements.sourcesList.innerHTML = '';
-    sceneItems.reverse().forEach(item => {
-      const sourceItem = createSourceItem(item);
+    for (const item of sceneItems.reverse()) {
+      const inputKind = inputKindMap.get(item.sourceName) || '';
+      const browserDetails = await getBrowserSourceDetails(item.sourceName, inputKind);
+      const sourceItem = await createSourceItem(item, inputKind, browserDetails);
       elements.sourcesList.appendChild(sourceItem);
-    });
+    }
   } catch (error) {
     console.error('Failed to load sources:', error);
     elements.sourcesList.innerHTML = '<div class="empty-state">Failed to load sources</div>';
   }
 }
 
-function createSourceItem(item) {
+async function createSourceItem(item, inputKind = '', browserDetails = null) {
   const div = document.createElement('div');
   div.className = `source-item ${item.sceneItemEnabled ? 'visible' : 'hidden'}`;
   div.dataset.sceneItemId = item.sceneItemId;
   div.dataset.sourceName = item.sourceName;
+  
+  const header = document.createElement('div');
+  header.className = 'source-item-header';
   
   const iconSpan = document.createElement('i');
   iconSpan.className = `fas fa-${getSourceIcon(item.sourceType)}`;
@@ -708,9 +718,91 @@ function createSourceItem(item) {
     toggleSourceVisibility(item.sceneItemId, item.sourceName, !isCurrentlyVisible, visibilityBtn, div);
   };
   
-  div.appendChild(iconSpan);
-  div.appendChild(nameSpan);
-  div.appendChild(visibilityBtn);
+  header.appendChild(iconSpan);
+  header.appendChild(nameSpan);
+  header.appendChild(visibilityBtn);
+  div.appendChild(header);
+  
+  if (isBrowserSourceKind(inputKind) && browserDetails) {
+    const details = document.createElement('div');
+    details.className = 'browser-source-details';
+    
+    const urlRow = document.createElement('div');
+    urlRow.className = 'browser-url-row';
+    const urlLabel = document.createElement('span');
+    urlLabel.className = 'browser-url-label';
+    urlLabel.textContent = 'URL';
+    const urlValue = document.createElement('span');
+    urlValue.className = 'browser-url-value';
+    let currentUrl = browserDetails.url || 'Unavailable';
+    urlValue.textContent = currentUrl;
+    urlValue.title = currentUrl;
+    urlRow.appendChild(urlLabel);
+    urlRow.appendChild(urlValue);
+    
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'browser-actions';
+    const reloadBtn = document.createElement('button');
+    reloadBtn.className = 'btn btn-secondary btn-compact';
+    reloadBtn.innerHTML = '<i class="fas fa-rotate"></i> Reload';
+    reloadBtn.onclick = async (e) => {
+      e.stopPropagation();
+      await reloadBrowserSource(item.sourceName, reloadBtn);
+    };
+    
+    const editToggleBtn = document.createElement('button');
+    editToggleBtn.className = 'btn btn-secondary btn-compact';
+    editToggleBtn.innerHTML = '<i class="fas fa-pen"></i> Edit URL';
+    
+    const editRow = document.createElement('div');
+    editRow.className = 'browser-edit-row';
+    editRow.style.display = 'none';
+    const urlInput = document.createElement('input');
+    urlInput.type = 'text';
+    urlInput.value = currentUrl;
+    urlInput.placeholder = 'https://...';
+    urlInput.className = 'browser-url-input';
+    
+    const applyBtn = document.createElement('button');
+    applyBtn.className = 'btn btn-primary btn-compact';
+    applyBtn.innerHTML = '<i class="fas fa-check"></i> Apply';
+    applyBtn.onclick = async (e) => {
+      e.stopPropagation();
+      const newUrl = urlInput.value.trim();
+      const updated = await updateBrowserSourceUrl(item.sourceName, newUrl, urlValue, urlInput, applyBtn);
+      if (updated) {
+        currentUrl = newUrl;
+        editRow.style.display = 'none';
+      }
+    };
+    
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn btn-secondary btn-compact';
+    cancelBtn.innerHTML = '<i class="fas fa-times"></i> Cancel';
+    cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      urlInput.value = currentUrl;
+      editRow.style.display = 'none';
+    };
+    
+    editRow.appendChild(urlInput);
+    editRow.appendChild(applyBtn);
+    editRow.appendChild(cancelBtn);
+    
+    editToggleBtn.onclick = (e) => {
+      e.stopPropagation();
+      editRow.style.display = editRow.style.display === 'none' ? 'flex' : 'none';
+      urlInput.focus();
+    };
+    
+    actionsRow.appendChild(reloadBtn);
+    actionsRow.appendChild(editToggleBtn);
+    
+    details.appendChild(urlRow);
+    details.appendChild(actionsRow);
+    details.appendChild(editRow);
+    div.appendChild(details);
+  }
   
   return div;
 }
@@ -723,6 +815,78 @@ function getSourceIcon(sourceType) {
     'OBS_SOURCE_TYPE_SCENE': 'layer-group'
   };
   return icons[sourceType] || 'cube';
+}
+
+function isBrowserSourceKind(inputKind) {
+  return (inputKind || '').toLowerCase().includes('browser');
+}
+
+async function getBrowserSourceDetails(inputName, inputKind) {
+  if (!isBrowserSourceKind(inputKind)) {
+    return null;
+  }
+  
+  try {
+    const { inputSettings } = await obs.call('GetInputSettings', { inputName });
+    return { url: inputSettings?.url || '' };
+  } catch (error) {
+    console.error(`Failed to get browser source settings for ${inputName}:`, error);
+    return { url: '' };
+  }
+}
+
+async function reloadBrowserSource(inputName, button) {
+  const previousDisabled = button.disabled;
+  try {
+    button.disabled = true;
+    let lastError = null;
+    for (const propertyName of ['refreshnocache', 'refresh']) {
+      try {
+        await obs.call('PressInputPropertiesButton', { inputName, propertyName });
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    if (lastError) throw lastError;
+  } catch (error) {
+    console.error(`Failed to reload browser source ${inputName}:`, error);
+    alert(`Failed to reload browser source: ${error.message || error}`);
+  } finally {
+    button.disabled = previousDisabled;
+  }
+}
+
+async function updateBrowserSourceUrl(inputName, newUrl, urlLabel, inputEl, button) {
+  if (!newUrl) {
+    alert('URL cannot be empty.');
+    return false;
+  }
+  
+  if (!confirm('Apply new browser source URL and reload the source?')) {
+    return false;
+  }
+  
+  const previousDisabled = button.disabled;
+  try {
+    button.disabled = true;
+    await obs.call('SetInputSettings', {
+      inputName,
+      inputSettings: { url: newUrl },
+      overlay: true
+    });
+    urlLabel.textContent = newUrl;
+    urlLabel.title = newUrl;
+    inputEl.value = newUrl;
+    await reloadBrowserSource(inputName, button);
+    return true;
+  } catch (error) {
+    console.error(`Failed to update URL for ${inputName}:`, error);
+    alert(`Failed to update browser source URL: ${error.message || error}`);
+    return false;
+  } finally {
+    button.disabled = previousDisabled;
+  }
 }
 
 async function toggleSourceVisibility(sceneItemId, sourceName, enabled, button, sourceDiv) {

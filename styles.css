@@ -331,6 +331,12 @@ body {
   margin-bottom: 4px;
   font-size: 12px;
   display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-item-header {
+  display: flex;
   align-items: center;
   gap: 8px;
 }
@@ -377,6 +383,56 @@ body {
 
 .source-item.hidden:hover .source-visibility-btn {
   opacity: 1;
+}
+
+.browser-source-details {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.browser-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  word-break: break-all;
+}
+
+.browser-url-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.browser-url-value {
+  color: var(--text-primary);
+}
+
+.browser-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.browser-edit-row {
+  display: flex;
+  gap: 8px;
+}
+
+.browser-url-input {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.btn-compact {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .empty-state {
