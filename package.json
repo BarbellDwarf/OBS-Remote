@@ -19,7 +19,7 @@
     "remote-control",
     "electron"
   ],
-  "author": "OBS Remote Control Team <obs-remote@example.com>",
+  "author": "BarbellDwarf <78000963+BarbellDwarf@users.noreply.github.com>",
   "license": "MIT",
   "build": {
     "appId": "com.obsremote.app",
