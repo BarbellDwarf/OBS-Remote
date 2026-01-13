@@ -337,11 +337,16 @@ function shouldBlockShortcuts(event) {
   const target = event.target;
   if (!target) return false;
   if (target.closest('[data-block-shortcuts]')) return true;
-  const tag = target.tagName?.toLowerCase();
-  if ((['input', 'textarea', 'select', 'button'].includes(tag) || target.isContentEditable) && !target.classList.contains('shortcut-input')) {
+  if (isInteractiveElement(target)) return true;
+  if (elements.settingsModal && elements.settingsModal.style.display !== 'none') {
     return true;
   }
-  if (elements.settingsModal && elements.settingsModal.style.display !== 'none') {
+  return false;
+}
+
+function isInteractiveElement(target) {
+  const tag = target.tagName?.toLowerCase();
+  if ((['input', 'textarea', 'select', 'button'].includes(tag) || target.isContentEditable) && !target.classList.contains('shortcut-input')) {
     return true;
   }
   return false;
@@ -527,7 +532,7 @@ function loadConnectionsList() {
   
   connections.forEach((conn, index) => {
     const option = document.createElement('option');
-    option.value = index;
+    option.value = index.toString();
     option.textContent = conn.name;
     elements.savedConnections.appendChild(option);
   });
@@ -537,7 +542,7 @@ function loadConnectionsList() {
   if (preferences.defaultConnectionName) {
     const idx = connections.findIndex(c => c.name === preferences.defaultConnectionName);
     if (idx >= 0) {
-      elements.savedConnections.value = idx;
+      elements.savedConnections.value = idx.toString();
       loadSavedConnection();
     }
   }
