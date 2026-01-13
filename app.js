@@ -56,6 +56,7 @@ let currentScene = null;
 let statsInterval = null;
 let audioLevelIntervals = {};
 let syncInterval = null; // For bidirectional sync
+let isUserInteractingWithTransition = false; // Prevent sync from overwriting user changes
 
 // DOM Elements - with null checks for missing elements
 const elements = {
@@ -148,7 +149,12 @@ function setupEventListeners() {
   if (elements.virtualCamBtn) elements.virtualCamBtn.addEventListener('click', toggleVirtualCamera);
   if (elements.studioModeToggle) elements.studioModeToggle.addEventListener('change', toggleStudioMode);
   if (elements.transitionBtn) elements.transitionBtn.addEventListener('click', performTransition);
-  if (elements.transitionSelect) elements.transitionSelect.addEventListener('change', setCurrentTransition);
+  if (elements.transitionSelect) {
+    elements.transitionSelect.addEventListener('change', setCurrentTransition);
+    // Prevent bidirectional sync from overwriting during user interaction
+    elements.transitionSelect.addEventListener('focus', () => { isUserInteractingWithTransition = true; });
+    elements.transitionSelect.addEventListener('blur', () => { setTimeout(() => { isUserInteractingWithTransition = false; }, 100); });
+  }
   if (elements.savedConnections) elements.savedConnections.addEventListener('change', loadSavedConnection);
   if (elements.saveConnectionBtn) elements.saveConnectionBtn.addEventListener('click', saveCurrentConnection);
   if (elements.deleteConnectionBtn) elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
@@ -1443,7 +1449,7 @@ function startBidirectionalSync() {
       }
       
       // Sync transition selection
-      if (elements.transitionSelect) {
+      if (elements.transitionSelect && !isUserInteractingWithTransition) {
         const { currentSceneTransitionName } = await obs.call('GetCurrentSceneTransition');
         if (elements.transitionSelect.value !== currentSceneTransitionName) {
           elements.transitionSelect.value = currentSceneTransitionName;
