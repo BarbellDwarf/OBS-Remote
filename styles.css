@@ -337,6 +337,30 @@ body {
 
 .source-item i {
   color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.source-item .source-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-item .source-visibility-btn {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.source-item:hover .source-visibility-btn {
+  opacity: 1;
+}
+
+.source-item .source-visibility-btn:hover {
+  background-color: var(--button-hover);
 }
 
 .source-item.visible {
@@ -345,6 +369,14 @@ body {
 
 .source-item.hidden {
   opacity: 0.5;
+}
+
+.source-item.hidden .source-visibility-btn {
+  opacity: 0.7;
+}
+
+.source-item.hidden:hover .source-visibility-btn {
+  opacity: 1;
 }
 
 .empty-state {

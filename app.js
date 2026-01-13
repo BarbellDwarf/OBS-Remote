@@ -681,10 +681,29 @@ async function loadSceneSources(sceneName) {
 function createSourceItem(item) {
   const div = document.createElement('div');
   div.className = `source-item ${item.sceneItemEnabled ? 'visible' : 'hidden'}`;
-  div.innerHTML = `
-    <i class="fas fa-${getSourceIcon(item.sourceType)}"></i>
-    <span>${item.sourceName}</span>
-  `;
+  div.dataset.sceneItemId = item.sceneItemId;
+  div.dataset.sourceName = item.sourceName;
+  
+  const iconSpan = document.createElement('i');
+  iconSpan.className = `fas fa-${getSourceIcon(item.sourceType)}`;
+  
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'source-name';
+  nameSpan.textContent = item.sourceName;
+  
+  const visibilityBtn = document.createElement('button');
+  visibilityBtn.className = 'btn-icon source-visibility-btn';
+  visibilityBtn.title = item.sceneItemEnabled ? 'Hide source' : 'Show source';
+  visibilityBtn.innerHTML = `<i class="fas fa-eye${item.sceneItemEnabled ? '' : '-slash'}"></i>`;
+  visibilityBtn.onclick = (e) => {
+    e.stopPropagation();
+    toggleSourceVisibility(item.sceneItemId, item.sourceName, !item.sceneItemEnabled, visibilityBtn, div);
+  };
+  
+  div.appendChild(iconSpan);
+  div.appendChild(nameSpan);
+  div.appendChild(visibilityBtn);
+  
   return div;
 }
 
@@ -696,6 +715,26 @@ function getSourceIcon(sourceType) {
     'OBS_SOURCE_TYPE_SCENE': 'layer-group'
   };
   return icons[sourceType] || 'cube';
+}
+
+async function toggleSourceVisibility(sceneItemId, sourceName, enabled, button, sourceDiv) {
+  try {
+    await obs.call('SetSceneItemEnabled', {
+      sceneName: currentScene,
+      sceneItemId: sceneItemId,
+      sceneItemEnabled: enabled
+    });
+    
+    // Update UI
+    sourceDiv.className = `source-item ${enabled ? 'visible' : 'hidden'}`;
+    button.innerHTML = `<i class="fas fa-eye${enabled ? '' : '-slash'}"></i>`;
+    button.title = enabled ? 'Hide source' : 'Show source';
+    
+    console.log(`Source "${sourceName}" visibility set to ${enabled ? 'visible' : 'hidden'}`);
+  } catch (error) {
+    console.error('Failed to toggle source visibility:', error);
+    alert('Failed to toggle source visibility: ' + error.message);
+  }
 }
 
 // Audio
