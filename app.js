@@ -48,6 +48,7 @@ const MIN_DB = -60;  // Minimum dB level (silent/very quiet)
 const MAX_DB = 0;    // Maximum dB level (peak/clipping)
 const DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
 const DEFAULT_PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
+const MIN_STATS_INTERVAL_MS = 250;
 
 let obs = null;
 let isConnected = false;
@@ -153,9 +154,9 @@ async function init() {
     console.log('OBS event forwarding setup');
     
     setupEventListeners();
-  loadConnectionsList();
-  loadSettings();
-  loadStatsSettings();
+    loadConnectionsList();
+    loadSettings();
+    loadStatsSettings();
     console.log('OBS Remote Control initialized successfully');
   } catch (error) {
     console.error('Initialization error:', error);
@@ -391,9 +392,9 @@ function loadStatsSettings() {
 
 function handleStatsSettingsChange() {
   const interval = parseInt(elements.statsIntervalInput?.value || statsConfig.intervalMs, 10);
-  const clip = parseInt(elements.clipThresholdInput?.value || statsConfig.clipThresholdDb, 10);
+  const clip = parseFloat(elements.clipThresholdInput?.value || statsConfig.clipThresholdDb);
   const dropAlert = parseFloat(elements.dropAlertInput?.value || statsConfig.dropAlertPercent);
-  statsConfig.intervalMs = Math.max(250, isNaN(interval) ? statsConfig.intervalMs : interval);
+  statsConfig.intervalMs = Math.max(MIN_STATS_INTERVAL_MS, isNaN(interval) ? statsConfig.intervalMs : interval);
   statsConfig.clipThresholdDb = isNaN(clip) ? statsConfig.clipThresholdDb : clip;
   statsConfig.dropAlertPercent = isNaN(dropAlert) ? statsConfig.dropAlertPercent : dropAlert;
   localStorage.setItem('obsStatsConfig', JSON.stringify(statsConfig));
@@ -1257,7 +1258,7 @@ function updateStats(stats, streamStatus = {}, recordStatus = {}, now = Date.now
     elements.bytesSent.textContent = '--';
   }
   
-  // Received bytes not provided by OBS; display placeholder
+  // OBS stats typically do not include received bytes; show if present, otherwise placeholder
   if (elements.bytesReceived) elements.bytesReceived.textContent = streamStatus.outputBytesRecv ? formatBytes(streamStatus.outputBytesRecv) : '--';
   
   // Timecodes
@@ -1303,7 +1304,7 @@ function updateDropTrend(dropPercent) {
 function renderSparkline(values) {
   const chars = ['▁','▂','▃','▄','▅','▆','▇','█'];
   if (!values || values.length === 0) return '--';
-  const max = Math.max(...values, 1);
+  const max = Math.max(values.reduce((a, b) => Math.max(a, b), 0), 1);
   return values.map(v => {
     const idx = Math.min(chars.length - 1, Math.floor((v / max) * (chars.length - 1)));
     return chars[idx];
