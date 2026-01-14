@@ -803,22 +803,27 @@ function createFilterRow(sourceName, filter, container) {
   
   const header = document.createElement('div');
   header.className = 'filter-row-header';
-  header.innerHTML = `
-    <div class="filter-name">
-      <i class="fas fa-filter"></i>
-      <span>${filter.filterName}</span>
-    </div>
-  `;
+  const nameWrap = document.createElement('div');
+  nameWrap.className = 'filter-name';
+  const nameIcon = document.createElement('i');
+  nameIcon.className = 'fas fa-filter';
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = filter.filterName;
+  nameWrap.appendChild(nameIcon);
+  nameWrap.appendChild(nameSpan);
+  header.appendChild(nameWrap);
   
   const toggle = document.createElement('label');
   toggle.className = 'switch';
-  toggle.innerHTML = `
-    <input type="checkbox" ${filter.filterEnabled ? 'checked' : ''}>
-    <span class="slider round"></span>
-  `;
-  const checkbox = toggle.querySelector('input');
-  checkbox.addEventListener('change', async () => {
-    await setFilterEnabled(sourceName, filter.filterName, checkbox.checked, container);
+  const toggleInput = document.createElement('input');
+  toggleInput.type = 'checkbox';
+  toggleInput.checked = !!filter.filterEnabled;
+  const toggleSlider = document.createElement('span');
+  toggleSlider.className = 'slider round';
+  toggle.appendChild(toggleInput);
+  toggle.appendChild(toggleSlider);
+  toggleInput.addEventListener('change', async () => {
+    await setFilterEnabled(sourceName, filter.filterName, toggleInput.checked, container);
   });
   
   header.appendChild(toggle);
@@ -837,20 +842,30 @@ function createFilterControls(sourceName, filter, container) {
   const controls = document.createElement('div');
   controls.className = 'filter-controls';
   let hasControl = false;
+  const CROP_MAX = 4000; // Upper bound aligns with typical HD/4K frame sizes
   
   const addNumberControl = (label, key, value, min, max, step, isInteger = false) => {
     hasControl = true;
     const wrapper = document.createElement('label');
     wrapper.className = 'filter-control';
-    wrapper.innerHTML = `
-      <span>${label}</span>
-      <input type="number" value="${value}" min="${min}" max="${max}" step="${step}">
-    `;
-    const input = wrapper.querySelector('input');
+    const span = document.createElement('span');
+    span.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = value;
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    wrapper.appendChild(span);
+    wrapper.appendChild(input);
     input.addEventListener('change', async (e) => {
       const raw = isInteger ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
       if (Number.isNaN(raw)) return;
-      await updateFilterSetting(sourceName, filter.filterName, { [key]: raw }, container);
+      const clamped = Math.max(min, Math.min(max, raw));
+      if (clamped !== raw) {
+        e.target.value = clamped;
+      }
+      await updateFilterSetting(sourceName, filter.filterName, { [key]: clamped }, container);
     });
     controls.appendChild(wrapper);
   };
@@ -873,16 +888,16 @@ function createFilterControls(sourceName, filter, container) {
   }
   
   if (typeof settings.left === 'number') {
-    addNumberControl('Left', 'left', settings.left, 0, 4000, 1, true);
+    addNumberControl('Left', 'left', settings.left, 0, CROP_MAX, 1, true);
   }
   if (typeof settings.right === 'number') {
-    addNumberControl('Right', 'right', settings.right, 0, 4000, 1, true);
+    addNumberControl('Right', 'right', settings.right, 0, CROP_MAX, 1, true);
   }
   if (typeof settings.top === 'number') {
-    addNumberControl('Top', 'top', settings.top, 0, 4000, 1, true);
+    addNumberControl('Top', 'top', settings.top, 0, CROP_MAX, 1, true);
   }
   if (typeof settings.bottom === 'number') {
-    addNumberControl('Bottom', 'bottom', settings.bottom, 0, 4000, 1, true);
+    addNumberControl('Bottom', 'bottom', settings.bottom, 0, CROP_MAX, 1, true);
   }
   
   if (typeof settings.threshold === 'number') {
