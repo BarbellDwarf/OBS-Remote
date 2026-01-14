@@ -109,6 +109,24 @@ let lastDropPercent = 0;
 let audioLevelIntervals = {};
 let syncInterval = null; // For bidirectional sync
 let isUserInteractingWithTransition = false; // Prevent sync from overwriting user changes
+let sceneHotkeyOrder = []; // Ordered list of scenes for number hotkeys
+let focusedAudioInputName = null;
+
+const HOTKEY_STORAGE_KEY = 'hotkeySettingsV1';
+const DEFAULT_HOTKEY_SETTINGS = {
+  enabled: true,
+  bindings: {
+    sceneModifier: 'Mod',
+    streamToggle: 'Mod+S',
+    recordToggle: 'Mod+R',
+    studioToggle: 'Mod+Shift+S',
+    transition: 'Mod+T',
+    volumeUp: 'Mod+ArrowUp',
+    volumeDown: 'Mod+ArrowDown',
+    muteFocused: 'Mod+M'
+  }
+};
+const SPECIAL_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Enter', 'Tab'];
 let lastConnectionDetails = null;
 let autoReconnectTimeout = null;
 let userInitiatedDisconnect = false;
@@ -165,6 +183,13 @@ const elements = {
   refreshCollections: document.getElementById('refresh-collections'),
   profilesList: document.getElementById('profiles-list'),
   refreshProfiles: document.getElementById('refresh-profiles'),
+  hotkeysEnabled: document.getElementById('hotkeys-enabled'),
+  hotkeyRestoreBtn: document.getElementById('hotkey-restore-btn'),
+  hotkeyInputs: document.querySelectorAll('[data-hotkey-action]'),
+  hotkeyConflict: document.getElementById('hotkey-conflict')
+};
+
+let hotkeySettings = null;
   toastContainer: document.getElementById('toast-container'),
   notifyDnd: document.getElementById('notify-dnd'),
   notifyConnection: document.getElementById('notify-connection'),
@@ -508,6 +533,9 @@ async function init() {
     setupEventListeners();
     loadConnectionsList();
     loadSettings();
+    hotkeySettings = loadHotkeySettings();
+    applyHotkeySettingsToUI();
+    registerHotkeyInputHandlers();
     loadNotificationSettings();
     setupNotificationSettingsListeners();
     loadStatsSettings();
@@ -542,6 +570,285 @@ function setupEventListeners() {
   if (elements.deleteConnectionBtn) elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
   if (elements.refreshCollections) elements.refreshCollections.addEventListener('click', loadSceneCollections);
   if (elements.refreshProfiles) elements.refreshProfiles.addEventListener('click', loadProfiles);
+  if (elements.hotkeysEnabled) elements.hotkeysEnabled.addEventListener('change', (e) => {
+    hotkeySettings.enabled = e.target.checked;
+    saveHotkeySettings();
+  });
+  if (elements.hotkeyRestoreBtn) elements.hotkeyRestoreBtn.addEventListener('click', () => {
+    resetHotkeysToDefault();
+  });
+  
+  document.addEventListener('keydown', handleHotkey);
+}
+
+function isTypingInInput(target) {
+  if (!target) return false;
+  
+  const tagName = target.tagName;
+  
+  const inputTags = ['INPUT', 'TEXTAREA', 'SELECT'];
+  
+  return target.isContentEditable ||
+    inputTags.includes(tagName);
+}
+
+function cloneDefaultHotkeySettings() {
+  return JSON.parse(JSON.stringify(DEFAULT_HOTKEY_SETTINGS));
+}
+
+function loadHotkeySettings() {
+  try {
+    const raw = localStorage.getItem(HOTKEY_STORAGE_KEY);
+    if (!raw) return cloneDefaultHotkeySettings();
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed.enabled ?? DEFAULT_HOTKEY_SETTINGS.enabled,
+      bindings: { ...DEFAULT_HOTKEY_SETTINGS.bindings, ...(parsed.bindings || {}) }
+    };
+  } catch (e) {
+    console.warn('Failed to load hotkey settings, using defaults', e);
+    return cloneDefaultHotkeySettings();
+  }
+}
+
+function saveHotkeySettings() {
+  localStorage.setItem(HOTKEY_STORAGE_KEY, JSON.stringify(hotkeySettings));
+}
+
+function normalizeKey(key) {
+  if (!key) return '';
+  if (key === ' ') return 'Space';
+  if (key.length === 1) return key.toUpperCase();
+  if (SPECIAL_KEYS.includes(key)) return key;
+  return key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function formatHotkeyFromEvent(event) {
+  const parts = [];
+  if (event.ctrlKey || event.metaKey) parts.push('Mod');
+  if (event.shiftKey) parts.push('Shift');
+  if (event.altKey) parts.push('Alt');
+  const key = normalizeKey(event.key);
+  if (key && !['Control', 'Meta', 'Shift', 'Alt'].includes(key)) {
+    parts.push(key);
+  }
+  return parts.join('+');
+}
+
+function parseHotkeyString(binding) {
+  const result = {
+    mod: false,
+    shift: false,
+    alt: false,
+    key: null
+  };
+  if (!binding) return result;
+  
+  binding.split('+').forEach(part => {
+    const p = part.trim();
+    if (p === 'Mod') result.mod = true;
+    else if (p === 'Shift') result.shift = true;
+    else if (p === 'Alt') result.alt = true;
+    else if (p) result.key = p;
+  });
+  return result;
+}
+
+function modifiersMatch(event, parsed) {
+  const modMatch = parsed.mod ? (event.ctrlKey || event.metaKey) : !(event.ctrlKey || event.metaKey);
+  if (!modMatch) return false;
+  if (parsed.shift !== !!event.shiftKey) return false;
+  if (parsed.alt !== !!event.altKey) return false;
+  return true;
+}
+
+function matchesHotkey(event, binding) {
+  if (!binding) return false;
+  const parsed = parseHotkeyString(binding);
+  if (parsed.key && event.key && normalizeKey(event.key) !== normalizeKey(parsed.key)) return false;
+  return modifiersMatch(event, parsed);
+}
+
+function formatHotkeyDisplay(binding) {
+  if (!binding) return '';
+  return binding.replace(/Mod/gi, 'Ctrl/Cmd');
+}
+
+function applyHotkeySettingsToUI() {
+  if (elements.hotkeysEnabled) {
+    elements.hotkeysEnabled.checked = hotkeySettings.enabled;
+  }
+  if (elements.hotkeyInputs && elements.hotkeyInputs.forEach) {
+    elements.hotkeyInputs.forEach(input => {
+      const action = input.dataset.hotkeyAction;
+      input.value = hotkeySettings.bindings[action] || '';
+    });
+  }
+  validateHotkeyConflicts();
+  updateHotkeyHints();
+}
+
+function resetHotkeysToDefault() {
+  hotkeySettings = cloneDefaultHotkeySettings();
+  saveHotkeySettings();
+  applyHotkeySettingsToUI();
+}
+
+function validateHotkeyConflicts() {
+  if (!elements.hotkeyInputs || !elements.hotkeyConflict) return;
+  const valueMap = {};
+  let hasConflict = false;
+  
+  elements.hotkeyInputs.forEach(input => {
+    const val = input.value.trim();
+    input.classList.remove('conflict');
+    if (!val) return;
+    if (!valueMap[val]) {
+      valueMap[val] = [];
+    }
+    valueMap[val].push(input);
+  });
+  
+  Object.values(valueMap).forEach(list => {
+    if (list.length > 1) {
+      hasConflict = true;
+      list.forEach(el => el.classList.add('conflict'));
+    }
+  });
+  
+  if (hasConflict) {
+    elements.hotkeyConflict.textContent = 'Conflicting hotkeys detected. Adjust bindings to ensure each action is unique.';
+    elements.hotkeyConflict.classList.remove('hidden');
+  } else {
+    elements.hotkeyConflict.classList.add('hidden');
+  }
+}
+
+function registerHotkeyInputHandlers() {
+  if (!elements.hotkeyInputs) return;
+  elements.hotkeyInputs.forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      const action = input.dataset.hotkeyAction;
+      const hotkey = formatHotkeyFromEvent(e);
+      input.value = hotkey;
+      hotkeySettings.bindings[action] = hotkey;
+      saveHotkeySettings();
+      validateHotkeyConflicts();
+      updateHotkeyHints();
+    });
+    
+    input.addEventListener('focus', () => {
+      input.select();
+    });
+  });
+}
+
+function updateHotkeyHints() {
+  if (elements.streamBtn) {
+    elements.streamBtn.title = `Start/Stop Streaming (${formatHotkeyDisplay(hotkeySettings.bindings.streamToggle)})`;
+  }
+  if (elements.recordBtn) {
+    elements.recordBtn.title = `Start/Stop Recording (${formatHotkeyDisplay(hotkeySettings.bindings.recordToggle)})`;
+  }
+  if (elements.transitionBtn) {
+    elements.transitionBtn.title = `Trigger Transition (${formatHotkeyDisplay(hotkeySettings.bindings.transition)})`;
+  }
+  if (elements.studioModeToggle) {
+    elements.studioModeToggle.title = `Toggle Studio Mode (${formatHotkeyDisplay(hotkeySettings.bindings.studioToggle)})`;
+  }
+}
+
+function normalizeSceneNumber(value) {
+  const number = parseInt(value, 10);
+  return number >= 1 && number <= 9 ? number - 1 : null;
+}
+
+function getSceneIndexFromEvent(code, key) {
+  // Prefer physical key codes but fall back to key for environments that don't provide event.code
+  const codeMatch = code && code.match(/^(?:Digit|Numpad)(\d)$/);
+  if (codeMatch) {
+    const index = normalizeSceneNumber(codeMatch[1]);
+    if (index !== null) return index;
+  }
+  
+  if (key >= '1' && key <= '9') {
+    return normalizeSceneNumber(key);
+  }
+  
+  return null;
+}
+
+async function handleHotkey(event) {
+  if (event.defaultPrevented || event.isComposing || event.repeat) return;
+  if (!isConnected || !obs) return;
+  if (!hotkeySettings) hotkeySettings = loadHotkeySettings();
+  if (!hotkeySettings.enabled) return;
+  
+  // Ignore when typing in inputs
+  if (isTypingInInput(event.target)) return;
+  
+  const key = event.key.toLowerCase();
+  const sceneIndex = getSceneIndexFromEvent(event.code, key);
+  const sceneModifier = parseHotkeyString(hotkeySettings.bindings.sceneModifier);
+  
+  // Scene selection with configured modifier + 1-9
+  if (sceneIndex !== null && sceneIndex < sceneHotkeyOrder.length && modifiersMatch(event, sceneModifier)) {
+    const sceneName = sceneHotkeyOrder[sceneIndex];
+    if (sceneName) {
+      event.preventDefault();
+      await setScene(sceneName);
+    }
+    return;
+  }
+  
+  // Streaming toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.streamToggle)) {
+    event.preventDefault();
+    await toggleStreaming();
+    return;
+  }
+  
+  // Recording toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.recordToggle)) {
+    event.preventDefault();
+    await toggleRecording();
+    return;
+  }
+  
+  // Studio mode toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.studioToggle)) {
+    event.preventDefault();
+    elements.studioModeToggle.checked = !elements.studioModeToggle.checked;
+    await toggleStudioMode();
+    return;
+  }
+  
+  // Trigger transition
+  if (matchesHotkey(event, hotkeySettings.bindings.transition)) {
+    event.preventDefault();
+    await performTransition();
+    return;
+  }
+  
+  // Volume up/down on focused audio input
+  if (matchesHotkey(event, hotkeySettings.bindings.volumeUp)) {
+    event.preventDefault();
+    await adjustFocusedVolume(5);
+    return;
+  }
+  
+  if (matchesHotkey(event, hotkeySettings.bindings.volumeDown)) {
+    event.preventDefault();
+    await adjustFocusedVolume(-5);
+    return;
+  }
+  
+  // Mute focused audio input
+  if (matchesHotkey(event, hotkeySettings.bindings.muteFocused)) {
+    event.preventDefault();
+    await toggleFocusedMute();
+  }
   if (elements.refreshRecordings) elements.refreshRecordings.addEventListener('click', loadRecordings);
   if (elements.layoutPresetSelect) elements.layoutPresetSelect.addEventListener('change', (e) => applyLayoutPreset(e.target.value));
   if (elements.layoutDensitySelect) elements.layoutDensitySelect.addEventListener('change', () => applyLayoutFromInputs(true));
@@ -1498,7 +1805,11 @@ async function loadScenes() {
     currentScene = currentProgramSceneName;
     
     elements.scenesList.innerHTML = '';
-    scenes.reverse().forEach(scene => {
+    // Reverse once and reuse for both rendering order and hotkey mapping
+    const orderedScenes = [...scenes].reverse();
+    sceneHotkeyOrder = orderedScenes.map(scene => scene.sceneName);
+    
+    orderedScenes.forEach(scene => {
       const sceneItem = createSceneItem(scene.sceneName);
       elements.scenesList.appendChild(sceneItem);
       queueSceneThumbnail(scene.sceneName);
@@ -2221,6 +2532,10 @@ async function loadAudioSources() {
         elements.sceneAudioMixer.appendChild(audioChannel);
       }
     }
+    
+    if (focusedAudioInputName) {
+      setFocusedAudioInput(focusedAudioInputName);
+    }
   } catch (error) {
     console.error('Failed to load audio sources:', error);
     elements.globalAudioMixer.innerHTML = '<div class="empty-state">Failed to load audio sources</div>';
@@ -2231,6 +2546,7 @@ async function loadAudioSources() {
 async function createAudioChannel(inputName, inputKind = 'unknown') {
   const channel = document.createElement('div');
   channel.className = 'audio-channel';
+  channel.dataset.audioInput = inputName;
   
   try {
     const { inputMuted, inputVolumeDb } = await obs.call('GetInputMute', { inputName });
@@ -2274,6 +2590,10 @@ async function createAudioChannel(inputName, inputKind = 'unknown') {
       setVolume(inputName, percent);
     });
     
+    channel.addEventListener('click', () => {
+      setFocusedAudioInput(inputName, channel);
+    });
+    
     // Start audio level monitoring
     startAudioLevelMonitoring(inputName);
   } catch (error) {
@@ -2281,6 +2601,79 @@ async function createAudioChannel(inputName, inputKind = 'unknown') {
   }
   
   return channel;
+}
+
+function setFocusedAudioInput(inputName, channelElement) {
+  document.querySelectorAll('.audio-channel.hotkey-focus').forEach(el => el.classList.remove('hotkey-focus'));
+  focusedAudioInputName = inputName;
+  if (channelElement) {
+    channelElement.classList.add('hotkey-focus');
+  } else {
+    const el = document.querySelector(`.audio-channel[data-audio-input="${inputName}"]`);
+    if (el) el.classList.add('hotkey-focus');
+  }
+}
+
+function ensureFocusedAudioInput() {
+  if (focusedAudioInputName) {
+    const existing = document.querySelector(`.audio-channel[data-audio-input="${focusedAudioInputName}"]`);
+    if (existing) {
+      existing.classList.add('hotkey-focus');
+      return focusedAudioInputName;
+    }
+  }
+  
+  const fallback = document.querySelector('.audio-channel[data-audio-input]');
+  if (fallback) {
+    setFocusedAudioInput(fallback.dataset.audioInput, fallback);
+    return focusedAudioInputName;
+  }
+  return null;
+}
+
+async function adjustFocusedVolume(deltaPercent) {
+  const inputName = ensureFocusedAudioInput();
+  if (!inputName) {
+    console.warn('Select an audio channel to adjust volume.');
+    return;
+  }
+  try {
+    const { inputVolumeDb } = await obs.call('GetInputVolume', { inputName });
+    let percent = dbToPercent(inputVolumeDb);
+    percent = Math.min(100, Math.max(0, percent + deltaPercent));
+    await setVolume(inputName, percent);
+    
+    const slider = document.querySelector(`.volume-slider[data-input="${inputName}"]`);
+    if (slider) {
+      slider.value = percent;
+      const valueEl = slider.parentElement?.querySelector('.volume-value');
+      if (valueEl) valueEl.textContent = `${Math.round(percent)}%`;
+    }
+  } catch (error) {
+    console.error('Failed to adjust volume:', error);
+  }
+}
+
+async function toggleFocusedMute() {
+  const inputName = ensureFocusedAudioInput();
+  if (!inputName) {
+    console.warn('Select an audio channel to toggle mute.');
+    return;
+  }
+  try {
+    const { inputMuted } = await obs.call('GetInputMute', { inputName });
+    const newState = !inputMuted;
+    await obs.call('SetInputMute', { inputName, inputMuted: newState });
+    
+    const button = document.querySelector(`.mute-btn[data-input="${inputName}"]`);
+    if (button) {
+      button.classList.toggle('muted', newState);
+      const icon = button.querySelector('i');
+      if (icon) icon.className = newState ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    }
+  } catch (error) {
+    console.error('Failed to toggle mute:', error);
+  }
 }
 
 // Get icon for audio source type
@@ -2868,6 +3261,10 @@ function resetUI() {
   
   elements.studioModeToggle.checked = false;
   updateStudioModeUI();
+  
+  // Clear cached scene order for hotkeys
+  sceneHotkeyOrder = [];
+  focusedAudioInputName = null;
 }
 
 function clearIntervals() {

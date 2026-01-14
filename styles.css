@@ -5,6 +5,8 @@
   --success-color: #28a745;
   --danger-color: #dc3545;
   --warning-color: #ffc107;
+  --danger-bg: #2a171b;
+  --warning-bg: #2a240f;
   --dark-bg: #1e1e1e;
   --darker-bg: #141414;
   --panel-bg: #252525;
@@ -1323,6 +1325,83 @@ body.density-compact .list-container {
 .duration-control input:focus {
   outline: none;
   border-color: var(--primary-color);
+}
+
+/* Hotkeys */
+.hotkeys-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hotkey-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hotkey-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hotkey-settings {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.hotkey-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.hotkey-row label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.hotkey-input {
+  width: 100%;
+  background: var(--dark-bg);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: text;
+}
+
+.hotkey-input:focus {
+  outline: 1px solid var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.hotkey-input.conflict {
+  border-color: var(--danger-color);
+  background: var(--danger-bg);
+}
+
+.hotkey-conflict {
+  font-size: 12px;
+  color: var(--warning-color);
+  padding: 6px 8px;
+  border: 1px solid var(--warning-color);
+  border-radius: 4px;
+  background: var(--warning-bg);
+}
+
+.hotkey-conflict.hidden {
+  display: none;
+}
+
+.audio-channel.hotkey-focus {
+  border: 1px solid var(--primary-color);
+  box-shadow: 0 0 6px rgba(0, 132, 255, 0.4);
 }
 
 /* Scrollbar Styles */

@@ -227,6 +227,57 @@
           </div>
         </div>
 
+        <!-- Hotkey Settings -->
+        <div class="panel hotkeys-panel">
+          <div class="panel-header">
+            <h2><i class="fas fa-keyboard"></i> Hotkeys</h2>
+            <div class="hotkey-actions">
+              <label class="hotkey-toggle">
+                <input type="checkbox" id="hotkeys-enabled" checked>
+                <span>Enabled</span>
+              </label>
+              <button id="hotkey-restore-btn" class="btn-icon" title="Restore default hotkeys">
+                <i class="fas fa-undo"></i>
+              </button>
+            </div>
+          </div>
+          <div class="panel-body hotkey-settings">
+            <div id="hotkey-conflict" class="hotkey-conflict hidden"></div>
+            <div class="hotkey-row">
+              <label for="hotkey-scene-mod">Scenes (1-9 modifier)</label>
+              <input id="hotkey-scene-mod" data-hotkey-action="sceneModifier" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-stream">Start/Stop Stream</label>
+              <input id="hotkey-stream" data-hotkey-action="streamToggle" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-record">Start/Stop Record</label>
+              <input id="hotkey-record" data-hotkey-action="recordToggle" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-studio">Toggle Studio Mode</label>
+              <input id="hotkey-studio" data-hotkey-action="studioToggle" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-transition">Trigger Transition</label>
+              <input id="hotkey-transition" data-hotkey-action="transition" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-volume-up">Volume Up (focused)</label>
+              <input id="hotkey-volume-up" data-hotkey-action="volumeUp" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-volume-down">Volume Down (focused)</label>
+              <input id="hotkey-volume-down" data-hotkey-action="volumeDown" class="hotkey-input" type="text" readonly>
+            </div>
+            <div class="hotkey-row">
+              <label for="hotkey-mute">Mute/Unmute (focused)</label>
+              <input id="hotkey-mute" data-hotkey-action="muteFocused" class="hotkey-input" type="text" readonly>
+            </div>
+          </div>
+        </div>
+
         <!-- Stats Display -->
         <div class="stats-panel">
           <div class="stat-item">
