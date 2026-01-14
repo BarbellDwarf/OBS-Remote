@@ -10,7 +10,6 @@ Electron-based desktop application for controlling OBS Studio over WebSocket. Ru
 - **Streaming/recording/virtual camera**: Start/stop streaming and recording, pause/resume recording, and control the virtual camera.
 - **Audio mixing**: Global and scene audio mixers with volume sliders, mute toggles, and real-time VU meters powered by the `InputVolumeMeters` OBS event.
 - **Stats & health**: FPS, CPU, memory, bitrate, dropped frames, bytes sent/received, and stream/record timers.
-- **Recordings**: View the recordings list and refresh it from OBS.
 - **Keyboard shortcuts**: In-app shortcuts for connect, stream, record, studio mode, and transition actions (configurable in settings).
 
 ## Requirements
@@ -47,7 +46,7 @@ npm run build:linux # build Linux targets (AppImage, .deb, .rpm)
 2. Open OBS Remote, enter host, port, and password, then click **Connect** (status indicator turns green when connected).
 3. Switch scenes, adjust sources/transitions, and manage studio mode.
 4. Control streaming, recording, and virtual camera from the main controls.
-5. Mix audio with live meters and refresh recordings when needed.
+5. Mix audio with live meters.
 
 See [USAGE.md](USAGE.md) for a step-by-step guide and [VISUAL_GUIDE.md](VISUAL_GUIDE.md) for a walkthrough of the layout.
 
