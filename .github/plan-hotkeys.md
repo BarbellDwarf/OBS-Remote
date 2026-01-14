@@ -6,4 +6,3 @@
   2. Map keys to actions: scene switch (cache scene list), Start/StopStream, Start/StopRecording, ToggleStudioMode, TriggerTransition, volume up/down for focused source, mute/unmute focused source.
   3. Surface visual hints/tooltips for active bindings; detect conflicts; allow restore defaults.
   4. Persist bindings via settings; provide UI to edit per action and save.
-

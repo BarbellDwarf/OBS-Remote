@@ -6,4 +6,3 @@
   2. Subscribe to OBS events: StreamStateChanged, RecordStateChanged, ExitStarted, CurrentProgramSceneChanged, ConnectionClosed/Opened, error handlers.
   3. Add settings toggles for notification categories; support do-not-disturb mode.
   4. Ensure deduping/throttling to avoid spam.
-

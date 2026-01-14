@@ -148,10 +148,15 @@ Built applications will be in the `dist/` directory.
 
 ## Keyboard Shortcuts
 
-_(Can be implemented in future versions)_
-- `Ctrl/Cmd + 1-9`: Switch to scene 1-9
-- `Ctrl/Cmd + S`: Toggle streaming
-- `Ctrl/Cmd + R`: Toggle recording
+- Default bindings (editable in the Hotkeys panel):
+  - `Ctrl/Cmd + 1-9`: Switch scenes (scene list order)
+  - `Ctrl/Cmd + S`: Start/stop streaming
+  - `Ctrl/Cmd + R`: Start/stop recording
+  - `Ctrl/Cmd + Shift + S`: Toggle Studio Mode
+  - `Ctrl/Cmd + T`: Trigger transition
+  - `Ctrl/Cmd + ↑ / ↓`: Volume up/down for the focused audio channel
+  - `Ctrl/Cmd + M`: Mute/unmute the focused audio channel
+- Hotkeys can be toggled on/off, edited, and restored to defaults from the in-app Hotkeys panel. Focus an audio channel by clicking it before using volume/mute shortcuts.
 
 ## Troubleshooting
 
@@ -290,4 +295,3 @@ For issues and questions:
 ---
 
 Made with ❤️ for the OBS community
-

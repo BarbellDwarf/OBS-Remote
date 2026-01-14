@@ -80,6 +80,8 @@ let MIN_DB = DEFAULT_SETTINGS.minDb;  // Minimum dB level (silent/very quiet)
 let MAX_DB = DEFAULT_SETTINGS.maxDb;    // Maximum dB level (peak/clipping)
 let DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
 const PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
+const FILTER_CROP_MAX = 3840; // 4K UHD width; bounds typical HD/4K frame sizes
+let toastContainer = null;
 let preferences = { ...DEFAULT_SETTINGS };
 
 let obs = null;
@@ -104,6 +106,24 @@ let lastDropPercent = 0;
 let audioLevelIntervals = {};
 let syncInterval = null; // For bidirectional sync
 let isUserInteractingWithTransition = false; // Prevent sync from overwriting user changes
+let sceneHotkeyOrder = []; // Ordered list of scenes for number hotkeys
+let focusedAudioInputName = null;
+
+const HOTKEY_STORAGE_KEY = 'hotkeySettingsV1';
+const DEFAULT_HOTKEY_SETTINGS = {
+  enabled: true,
+  bindings: {
+    sceneModifier: 'Mod',
+    streamToggle: 'Mod+S',
+    recordToggle: 'Mod+R',
+    studioToggle: 'Mod+Shift+S',
+    transition: 'Mod+T',
+    volumeUp: 'Mod+ArrowUp',
+    volumeDown: 'Mod+ArrowDown',
+    muteFocused: 'Mod+M'
+  }
+};
+const SPECIAL_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Escape', 'Enter', 'Tab'];
 let lastConnectionDetails = null;
 let autoReconnectTimeout = null;
 let userInitiatedDisconnect = false;
@@ -160,6 +180,33 @@ const elements = {
   refreshCollections: document.getElementById('refresh-collections'),
   profilesList: document.getElementById('profiles-list'),
   refreshProfiles: document.getElementById('refresh-profiles'),
+  hotkeysEnabled: document.getElementById('hotkeys-enabled'),
+  hotkeyRestoreBtn: document.getElementById('hotkey-restore-btn'),
+  hotkeyInputs: document.querySelectorAll('[data-hotkey-action]'),
+  hotkeyConflict: document.getElementById('hotkey-conflict')
+};
+
+let hotkeySettings = null;
+  toastContainer: document.getElementById('toast-container'),
+  notifyDnd: document.getElementById('notify-dnd'),
+  notifyConnection: document.getElementById('notify-connection'),
+  notifyStream: document.getElementById('notify-stream'),
+  notifyRecord: document.getElementById('notify-record'),
+  notifyScene: document.getElementById('notify-scene'),
+  notifyError: document.getElementById('notify-error')
+};
+
+const notificationDefaults = {
+  dnd: false,
+  connection: true,
+  stream: true,
+  record: true,
+  scene: true,
+  error: true
+};
+
+let notificationSettings = { ...notificationDefaults };
+const lastToastTimestamps = {};
   recordingsList: document.getElementById('recordings-list'),
   refreshRecordings: document.getElementById('refresh-recordings'),
   layoutPresetSelect: document.getElementById('layout-preset-select'),
@@ -484,6 +531,11 @@ async function init() {
     setupEventListeners();
     loadConnectionsList();
     loadSettings();
+    hotkeySettings = loadHotkeySettings();
+    applyHotkeySettingsToUI();
+    registerHotkeyInputHandlers();
+    loadNotificationSettings();
+    setupNotificationSettingsListeners();
     loadStatsSettings();
     initializeLayoutPresets();
     console.log('OBS Remote Control initialized successfully');
@@ -516,6 +568,285 @@ function setupEventListeners() {
   if (elements.deleteConnectionBtn) elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
   if (elements.refreshCollections) elements.refreshCollections.addEventListener('click', loadSceneCollections);
   if (elements.refreshProfiles) elements.refreshProfiles.addEventListener('click', loadProfiles);
+  if (elements.hotkeysEnabled) elements.hotkeysEnabled.addEventListener('change', (e) => {
+    hotkeySettings.enabled = e.target.checked;
+    saveHotkeySettings();
+  });
+  if (elements.hotkeyRestoreBtn) elements.hotkeyRestoreBtn.addEventListener('click', () => {
+    resetHotkeysToDefault();
+  });
+  
+  document.addEventListener('keydown', handleHotkey);
+}
+
+function isTypingInInput(target) {
+  if (!target) return false;
+  
+  const tagName = target.tagName;
+  
+  const inputTags = ['INPUT', 'TEXTAREA', 'SELECT'];
+  
+  return target.isContentEditable ||
+    inputTags.includes(tagName);
+}
+
+function cloneDefaultHotkeySettings() {
+  return JSON.parse(JSON.stringify(DEFAULT_HOTKEY_SETTINGS));
+}
+
+function loadHotkeySettings() {
+  try {
+    const raw = localStorage.getItem(HOTKEY_STORAGE_KEY);
+    if (!raw) return cloneDefaultHotkeySettings();
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed.enabled ?? DEFAULT_HOTKEY_SETTINGS.enabled,
+      bindings: { ...DEFAULT_HOTKEY_SETTINGS.bindings, ...(parsed.bindings || {}) }
+    };
+  } catch (e) {
+    console.warn('Failed to load hotkey settings, using defaults', e);
+    return cloneDefaultHotkeySettings();
+  }
+}
+
+function saveHotkeySettings() {
+  localStorage.setItem(HOTKEY_STORAGE_KEY, JSON.stringify(hotkeySettings));
+}
+
+function normalizeKey(key) {
+  if (!key) return '';
+  if (key === ' ') return 'Space';
+  if (key.length === 1) return key.toUpperCase();
+  if (SPECIAL_KEYS.includes(key)) return key;
+  return key.length === 1 ? key.toUpperCase() : key.charAt(0).toUpperCase() + key.slice(1);
+}
+
+function formatHotkeyFromEvent(event) {
+  const parts = [];
+  if (event.ctrlKey || event.metaKey) parts.push('Mod');
+  if (event.shiftKey) parts.push('Shift');
+  if (event.altKey) parts.push('Alt');
+  const key = normalizeKey(event.key);
+  if (key && !['Control', 'Meta', 'Shift', 'Alt'].includes(key)) {
+    parts.push(key);
+  }
+  return parts.join('+');
+}
+
+function parseHotkeyString(binding) {
+  const result = {
+    mod: false,
+    shift: false,
+    alt: false,
+    key: null
+  };
+  if (!binding) return result;
+  
+  binding.split('+').forEach(part => {
+    const p = part.trim();
+    if (p === 'Mod') result.mod = true;
+    else if (p === 'Shift') result.shift = true;
+    else if (p === 'Alt') result.alt = true;
+    else if (p) result.key = p;
+  });
+  return result;
+}
+
+function modifiersMatch(event, parsed) {
+  const modMatch = parsed.mod ? (event.ctrlKey || event.metaKey) : !(event.ctrlKey || event.metaKey);
+  if (!modMatch) return false;
+  if (parsed.shift !== !!event.shiftKey) return false;
+  if (parsed.alt !== !!event.altKey) return false;
+  return true;
+}
+
+function matchesHotkey(event, binding) {
+  if (!binding) return false;
+  const parsed = parseHotkeyString(binding);
+  if (parsed.key && event.key && normalizeKey(event.key) !== normalizeKey(parsed.key)) return false;
+  return modifiersMatch(event, parsed);
+}
+
+function formatHotkeyDisplay(binding) {
+  if (!binding) return '';
+  return binding.replace(/Mod/gi, 'Ctrl/Cmd');
+}
+
+function applyHotkeySettingsToUI() {
+  if (elements.hotkeysEnabled) {
+    elements.hotkeysEnabled.checked = hotkeySettings.enabled;
+  }
+  if (elements.hotkeyInputs && elements.hotkeyInputs.forEach) {
+    elements.hotkeyInputs.forEach(input => {
+      const action = input.dataset.hotkeyAction;
+      input.value = hotkeySettings.bindings[action] || '';
+    });
+  }
+  validateHotkeyConflicts();
+  updateHotkeyHints();
+}
+
+function resetHotkeysToDefault() {
+  hotkeySettings = cloneDefaultHotkeySettings();
+  saveHotkeySettings();
+  applyHotkeySettingsToUI();
+}
+
+function validateHotkeyConflicts() {
+  if (!elements.hotkeyInputs || !elements.hotkeyConflict) return;
+  const valueMap = {};
+  let hasConflict = false;
+  
+  elements.hotkeyInputs.forEach(input => {
+    const val = input.value.trim();
+    input.classList.remove('conflict');
+    if (!val) return;
+    if (!valueMap[val]) {
+      valueMap[val] = [];
+    }
+    valueMap[val].push(input);
+  });
+  
+  Object.values(valueMap).forEach(list => {
+    if (list.length > 1) {
+      hasConflict = true;
+      list.forEach(el => el.classList.add('conflict'));
+    }
+  });
+  
+  if (hasConflict) {
+    elements.hotkeyConflict.textContent = 'Conflicting hotkeys detected. Adjust bindings to ensure each action is unique.';
+    elements.hotkeyConflict.classList.remove('hidden');
+  } else {
+    elements.hotkeyConflict.classList.add('hidden');
+  }
+}
+
+function registerHotkeyInputHandlers() {
+  if (!elements.hotkeyInputs) return;
+  elements.hotkeyInputs.forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      e.preventDefault();
+      const action = input.dataset.hotkeyAction;
+      const hotkey = formatHotkeyFromEvent(e);
+      input.value = hotkey;
+      hotkeySettings.bindings[action] = hotkey;
+      saveHotkeySettings();
+      validateHotkeyConflicts();
+      updateHotkeyHints();
+    });
+    
+    input.addEventListener('focus', () => {
+      input.select();
+    });
+  });
+}
+
+function updateHotkeyHints() {
+  if (elements.streamBtn) {
+    elements.streamBtn.title = `Start/Stop Streaming (${formatHotkeyDisplay(hotkeySettings.bindings.streamToggle)})`;
+  }
+  if (elements.recordBtn) {
+    elements.recordBtn.title = `Start/Stop Recording (${formatHotkeyDisplay(hotkeySettings.bindings.recordToggle)})`;
+  }
+  if (elements.transitionBtn) {
+    elements.transitionBtn.title = `Trigger Transition (${formatHotkeyDisplay(hotkeySettings.bindings.transition)})`;
+  }
+  if (elements.studioModeToggle) {
+    elements.studioModeToggle.title = `Toggle Studio Mode (${formatHotkeyDisplay(hotkeySettings.bindings.studioToggle)})`;
+  }
+}
+
+function normalizeSceneNumber(value) {
+  const number = parseInt(value, 10);
+  return number >= 1 && number <= 9 ? number - 1 : null;
+}
+
+function getSceneIndexFromEvent(code, key) {
+  // Prefer physical key codes but fall back to key for environments that don't provide event.code
+  const codeMatch = code && code.match(/^(?:Digit|Numpad)(\d)$/);
+  if (codeMatch) {
+    const index = normalizeSceneNumber(codeMatch[1]);
+    if (index !== null) return index;
+  }
+  
+  if (key >= '1' && key <= '9') {
+    return normalizeSceneNumber(key);
+  }
+  
+  return null;
+}
+
+async function handleHotkey(event) {
+  if (event.defaultPrevented || event.isComposing || event.repeat) return;
+  if (!isConnected || !obs) return;
+  if (!hotkeySettings) hotkeySettings = loadHotkeySettings();
+  if (!hotkeySettings.enabled) return;
+  
+  // Ignore when typing in inputs
+  if (isTypingInInput(event.target)) return;
+  
+  const key = event.key.toLowerCase();
+  const sceneIndex = getSceneIndexFromEvent(event.code, key);
+  const sceneModifier = parseHotkeyString(hotkeySettings.bindings.sceneModifier);
+  
+  // Scene selection with configured modifier + 1-9
+  if (sceneIndex !== null && sceneIndex < sceneHotkeyOrder.length && modifiersMatch(event, sceneModifier)) {
+    const sceneName = sceneHotkeyOrder[sceneIndex];
+    if (sceneName) {
+      event.preventDefault();
+      await setScene(sceneName);
+    }
+    return;
+  }
+  
+  // Streaming toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.streamToggle)) {
+    event.preventDefault();
+    await toggleStreaming();
+    return;
+  }
+  
+  // Recording toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.recordToggle)) {
+    event.preventDefault();
+    await toggleRecording();
+    return;
+  }
+  
+  // Studio mode toggle
+  if (matchesHotkey(event, hotkeySettings.bindings.studioToggle)) {
+    event.preventDefault();
+    elements.studioModeToggle.checked = !elements.studioModeToggle.checked;
+    await toggleStudioMode();
+    return;
+  }
+  
+  // Trigger transition
+  if (matchesHotkey(event, hotkeySettings.bindings.transition)) {
+    event.preventDefault();
+    await performTransition();
+    return;
+  }
+  
+  // Volume up/down on focused audio input
+  if (matchesHotkey(event, hotkeySettings.bindings.volumeUp)) {
+    event.preventDefault();
+    await adjustFocusedVolume(5);
+    return;
+  }
+  
+  if (matchesHotkey(event, hotkeySettings.bindings.volumeDown)) {
+    event.preventDefault();
+    await adjustFocusedVolume(-5);
+    return;
+  }
+  
+  // Mute focused audio input
+  if (matchesHotkey(event, hotkeySettings.bindings.muteFocused)) {
+    event.preventDefault();
+    await toggleFocusedMute();
+  }
   if (elements.refreshRecordings) elements.refreshRecordings.addEventListener('click', loadRecordings);
   if (elements.layoutPresetSelect) elements.layoutPresetSelect.addEventListener('change', (e) => applyLayoutPreset(e.target.value));
   if (elements.layoutDensitySelect) elements.layoutDensitySelect.addEventListener('change', () => applyLayoutFromInputs(true));
@@ -1072,6 +1403,101 @@ function handleStatsSettingsChange() {
   if (isConnected) startStatsPolling(); // restart with new interval/threshold
 }
 
+function loadNotificationSettings() {
+  const stored = JSON.parse(localStorage.getItem('notificationSettings') || '{}');
+  notificationSettings = { ...notificationDefaults, ...stored };
+  if (elements.notifyDnd) elements.notifyDnd.checked = notificationSettings.dnd;
+  if (elements.notifyConnection) elements.notifyConnection.checked = notificationSettings.connection;
+  if (elements.notifyStream) elements.notifyStream.checked = notificationSettings.stream;
+  if (elements.notifyRecord) elements.notifyRecord.checked = notificationSettings.record;
+  if (elements.notifyScene) elements.notifyScene.checked = notificationSettings.scene;
+  if (elements.notifyError) elements.notifyError.checked = notificationSettings.error;
+}
+
+function saveNotificationSettings() {
+  localStorage.setItem('notificationSettings', JSON.stringify(notificationSettings));
+}
+
+function setupNotificationSettingsListeners() {
+  const bindings = [
+    { el: elements.notifyDnd, key: 'dnd' },
+    { el: elements.notifyConnection, key: 'connection' },
+    { el: elements.notifyStream, key: 'stream' },
+    { el: elements.notifyRecord, key: 'record' },
+    { el: elements.notifyScene, key: 'scene' },
+    { el: elements.notifyError, key: 'error' }
+  ];
+  bindings.forEach(({ el, key }) => {
+    if (!el) return;
+    el.addEventListener('change', () => {
+      notificationSettings[key] = el.checked;
+      saveNotificationSettings();
+    });
+  });
+}
+
+function shouldNotify(category) {
+  if (!elements.toastContainer) return false;
+  if (notificationSettings.dnd) return false;
+  return notificationSettings[category] !== false;
+}
+
+function showToast(category, message, options = {}) {
+  if (!elements.toastContainer) return;
+  if (!shouldNotify(category)) return;
+
+  const severity = options.severity || 'info';
+  const title = options.title || {
+    connection: 'Connection',
+    stream: 'Streaming',
+    record: 'Recording',
+    scene: 'Scene',
+    error: 'Error'
+  }[category] || 'Notification';
+  const key = `${category}:${message}`;
+  const now = Date.now();
+  if (lastToastTimestamps[key] && now - lastToastTimestamps[key] < 1500) {
+    return;
+  }
+  lastToastTimestamps[key] = now;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${severity}`;
+
+  const iconMap = {
+    success: 'fa-check-circle',
+    info: 'fa-info-circle',
+    warning: 'fa-exclamation-triangle',
+    error: 'fa-times-circle'
+  };
+
+  const icon = document.createElement('i');
+  icon.className = `fas ${iconMap[severity] || iconMap.info} toast-icon`;
+
+  const content = document.createElement('div');
+  content.className = 'toast-content';
+
+  const titleEl = document.createElement('div');
+  titleEl.className = 'toast-title';
+  titleEl.textContent = title;
+
+  const messageEl = document.createElement('div');
+  messageEl.className = 'toast-message';
+  messageEl.textContent = message;
+
+  content.appendChild(titleEl);
+  content.appendChild(messageEl);
+
+  toast.appendChild(icon);
+  toast.appendChild(content);
+
+  elements.toastContainer.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, options.duration || 4000);
+}
+
 // Connection handling
 async function handleConnect() {
   if (!obs) {
@@ -1118,6 +1544,7 @@ async function connect(connectionOpts = null) {
     elements.connectBtn.disabled = false;
     elements.connectBtn.classList.remove('btn-primary');
     elements.connectBtn.classList.add('btn-danger');
+    showToast('connection', 'Connected to OBS', { severity: 'success', title: 'Connected' });
     
     saveSettings();
     await initializeOBSConnection();
@@ -1139,6 +1566,7 @@ async function connect(connectionOpts = null) {
       errorMessage += '\n\nMake sure:\n• OBS Studio is running\n• WebSocket server is enabled in OBS\n• Host and port are correct';
     }
     alert(errorMessage);
+    showToast('error', errorMessage, { severity: 'error', title: 'Connection failed', duration: 5000 });
   }
 }
 
@@ -1152,6 +1580,7 @@ async function disconnect() {
     }
     resetConnectionUI();
     console.log('Disconnected successfully');
+    showToast('connection', 'Disconnected from OBS', { severity: 'info', title: 'Disconnected' });
   } catch (error) {
     console.error('Disconnect error:', error);
     // Still reset UI even if disconnect fails
@@ -1214,12 +1643,16 @@ function setupOBSEventListeners() {
   obs.on('ConnectionClosed', () => {
     console.log('Connection to OBS closed');
     resetConnectionUI();
+    showToast('connection', 'Connection to OBS closed', { severity: 'warning', title: 'Connection closed' });
     scheduleAutoReconnect('closed');
   });
   
   obs.on('ConnectionError', (error) => {
     console.error('Connection error:', error);
     resetConnectionUI();
+    const message = 'Lost connection to OBS: ' + (error.message || 'Unknown error');
+    alert(message);
+    showToast('error', message, { severity: 'error', title: 'Connection error' });
     alert('Lost connection to OBS: ' + (error.message || 'Unknown error'));
     scheduleAutoReconnect('error');
   });
@@ -1234,6 +1667,7 @@ function setupOBSEventListeners() {
     }
     // Refresh audio mixer to show scene-specific audio
     loadAudioSources();
+    showToast('scene', `Scene changed to ${data.sceneName}`, { severity: 'info', title: 'Scene changed' });
   });
   
   obs.on('SceneListChanged', () => {
@@ -1254,11 +1688,17 @@ function setupOBSEventListeners() {
   // Stream events
   obs.on('StreamStateChanged', (data) => {
     updateStreamButton(data.outputActive);
+    const severity = data.outputActive ? 'success' : 'info';
+    const message = data.outputActive ? 'Streaming started' : 'Streaming stopped';
+    showToast('stream', message, { severity, title: 'Streaming' });
   });
   
   // Recording events
   obs.on('RecordStateChanged', (data) => {
     updateRecordButton(data.outputActive);
+    const severity = data.outputActive ? 'success' : 'info';
+    const message = data.outputActive ? 'Recording started' : 'Recording stopped';
+    showToast('record', message, { severity, title: 'Recording' });
   });
   
   // Studio mode events
@@ -1363,7 +1803,11 @@ async function loadScenes() {
     currentScene = currentProgramSceneName;
     
     elements.scenesList.innerHTML = '';
-    scenes.reverse().forEach(scene => {
+    // Reverse once and reuse for both rendering order and hotkey mapping
+    const orderedScenes = [...scenes].reverse();
+    sceneHotkeyOrder = orderedScenes.map(scene => scene.sceneName);
+    
+    orderedScenes.forEach(scene => {
       const sceneItem = createSceneItem(scene.sceneName);
       elements.scenesList.appendChild(sceneItem);
       queueSceneThumbnail(scene.sceneName);
@@ -1611,6 +2055,8 @@ async function createSourceItem(item, inputKind = '', browserDetails = null) {
   div.dataset.sourceName = item.sourceName;
   
   const header = document.createElement('div');
+  header.className = 'source-header';
+
   header.className = 'source-item-header';
   
   const iconSpan = document.createElement('i');
@@ -1619,6 +2065,14 @@ async function createSourceItem(item, inputKind = '', browserDetails = null) {
   const nameSpan = document.createElement('span');
   nameSpan.className = 'source-name';
   nameSpan.textContent = item.sourceName;
+  
+  const actions = document.createElement('div');
+  actions.className = 'source-actions';
+  
+  const filtersBtn = document.createElement('button');
+  filtersBtn.className = 'btn-icon source-filters-btn';
+  filtersBtn.title = 'Filters';
+  filtersBtn.innerHTML = '<i class="fas fa-sliders-h"></i>';
   
   const visibilityBtn = document.createElement('button');
   visibilityBtn.className = 'btn-icon source-visibility-btn';
@@ -1630,9 +2084,30 @@ async function createSourceItem(item, inputKind = '', browserDetails = null) {
     const isCurrentlyVisible = div.classList.contains('visible');
     toggleSourceVisibility(item.sceneItemId, item.sourceName, !isCurrentlyVisible, visibilityBtn, div);
   };
+
+  actions.appendChild(filtersBtn);
+  actions.appendChild(visibilityBtn);
   
   header.appendChild(iconSpan);
   header.appendChild(nameSpan);
+  header.appendChild(actions);
+
+  const filtersContainer = document.createElement('div');
+  filtersContainer.className = 'filters-drawer';
+  filtersContainer.style.display = 'none';
+
+  filtersBtn.onclick = async (e) => {
+    e.stopPropagation();
+    const isOpen = filtersContainer.style.display === 'block';
+    filtersContainer.style.display = isOpen ? 'none' : 'block';
+    filtersBtn.classList.toggle('active', !isOpen);
+    if (!isOpen) {
+      await renderSourceFilters(item.sourceName, filtersContainer);
+    }
+  };
+  
+  div.appendChild(header);
+  div.appendChild(filtersContainer);
   header.appendChild(visibilityBtn);
   div.appendChild(header);
   
@@ -1822,6 +2297,174 @@ async function toggleSourceVisibility(sceneItemId, sourceName, enabled, button, 
   }
 }
 
+// Source Filters
+async function renderSourceFilters(sourceName, container) {
+  container.innerHTML = '<div class="filters-loading">Loading filters...</div>';
+  try {
+    const { filters } = await obs.call('GetSourceFilterList', { sourceName });
+    if (!filters || filters.length === 0) {
+      container.innerHTML = '<div class="empty-state small">No filters on this source</div>';
+      return;
+    }
+    
+    container.innerHTML = '';
+    filters.forEach(filter => {
+      const row = createFilterRow(sourceName, filter, container);
+      container.appendChild(row);
+    });
+  } catch (error) {
+    console.error(`Failed to load filters for ${sourceName}:`, error);
+    container.innerHTML = '<div class="empty-state small">Failed to load filters</div>';
+  }
+}
+
+function createFilterRow(sourceName, filter, container) {
+  const row = document.createElement('div');
+  row.className = 'filter-row';
+  
+  const header = document.createElement('div');
+  header.className = 'filter-row-header';
+  const nameWrap = document.createElement('div');
+  nameWrap.className = 'filter-name';
+  const nameIcon = document.createElement('i');
+  nameIcon.className = 'fas fa-filter';
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = filter.filterName;
+  nameWrap.appendChild(nameIcon);
+  nameWrap.appendChild(nameSpan);
+  header.appendChild(nameWrap);
+  
+  const toggle = document.createElement('label');
+  toggle.className = 'switch';
+  const toggleInput = document.createElement('input');
+  toggleInput.type = 'checkbox';
+  toggleInput.checked = !!filter.filterEnabled;
+  const toggleSlider = document.createElement('span');
+  toggleSlider.className = 'slider round';
+  toggle.appendChild(toggleInput);
+  toggle.appendChild(toggleSlider);
+  toggleInput.addEventListener('change', async () => {
+    await setFilterEnabled(sourceName, filter.filterName, toggleInput.checked, container);
+  });
+  
+  header.appendChild(toggle);
+  row.appendChild(header);
+  
+  const controls = createFilterControls(sourceName, filter, container);
+  if (controls) {
+    row.appendChild(controls);
+  }
+  
+  return row;
+}
+
+function createFilterControls(sourceName, filter, container) {
+  const settings = filter.filterSettings || {};
+  const controls = document.createElement('div');
+  controls.className = 'filter-controls';
+  let hasControl = false;
+  
+  const addNumberControl = (label, key, value, min, max, step, isInteger = false) => {
+    hasControl = true;
+    let currentValue = value;
+    const wrapper = document.createElement('label');
+    wrapper.className = 'filter-control';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.value = value;
+    input.min = min;
+    input.max = max;
+    input.step = step;
+    wrapper.appendChild(span);
+    wrapper.appendChild(input);
+    input.addEventListener('change', async (e) => {
+      const raw = isInteger ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+      if (Number.isNaN(raw)) {
+        showToast(`Enter a valid number between ${min} and ${max}.`);
+        e.target.value = currentValue;
+        return;
+      }
+      const clamped = Math.max(min, Math.min(max, raw));
+      if (clamped !== raw) {
+        e.target.value = clamped;
+      }
+      await updateFilterSetting(sourceName, filter.filterName, { [key]: clamped }, container);
+      currentValue = clamped;
+    });
+    controls.appendChild(wrapper);
+  };
+  
+  if (typeof settings.db === 'number') {
+    addNumberControl('Gain (dB)', 'db', settings.db, -30, 30, 0.1);
+  }
+  
+  if (typeof settings.brightness === 'number') {
+    addNumberControl('Brightness', 'brightness', settings.brightness, -2, 2, 0.05);
+  }
+  if (typeof settings.contrast === 'number') {
+    addNumberControl('Contrast', 'contrast', settings.contrast, 0, 2, 0.05);
+  }
+  if (typeof settings.saturation === 'number') {
+    addNumberControl('Saturation', 'saturation', settings.saturation, 0, 2, 0.05);
+  }
+  if (typeof settings.gamma === 'number') {
+    addNumberControl('Gamma', 'gamma', settings.gamma, 0, 3, 0.05);
+  }
+  
+  if (typeof settings.left === 'number') {
+    addNumberControl('Left', 'left', settings.left, 0, FILTER_CROP_MAX, 1, true);
+  }
+  if (typeof settings.right === 'number') {
+    addNumberControl('Right', 'right', settings.right, 0, FILTER_CROP_MAX, 1, true);
+  }
+  if (typeof settings.top === 'number') {
+    addNumberControl('Top', 'top', settings.top, 0, FILTER_CROP_MAX, 1, true);
+  }
+  if (typeof settings.bottom === 'number') {
+    addNumberControl('Bottom', 'bottom', settings.bottom, 0, FILTER_CROP_MAX, 1, true);
+  }
+  
+  if (typeof settings.threshold === 'number') {
+    addNumberControl('Threshold', 'threshold', settings.threshold, -60, 0, 0.5);
+  }
+  
+  if (!hasControl) {
+    controls.innerHTML = '<div class="filter-note">No quick controls for this filter type.</div>';
+  }
+  
+  return controls;
+}
+
+async function setFilterEnabled(sourceName, filterName, enabled, container) {
+  try {
+    await obs.call('SetSourceFilterEnabled', { sourceName, filterName, filterEnabled: enabled });
+  } catch (error) {
+    console.error(`Failed to toggle filter "${filterName}" on ${sourceName}:`, error);
+    showToast(`Failed to toggle filter "${filterName}": ${error.message}`);
+    if (container) {
+      await renderSourceFilters(sourceName, container);
+    }
+  }
+}
+
+async function updateFilterSetting(sourceName, filterName, partialSettings, container) {
+  try {
+    await obs.call('SetSourceFilterSettings', {
+      sourceName,
+      filterName,
+      filterSettings: partialSettings
+    });
+  } catch (error) {
+    console.error(`Failed to update filter settings for "${filterName}" on ${sourceName}:`, error);
+    showToast(`Failed to update settings for filter "${filterName}": ${error.message}`);
+    if (container) {
+      await renderSourceFilters(sourceName, container);
+    }
+  }
+}
+
 // Audio
 async function loadAudioSources() {
   try {
@@ -1887,6 +2530,10 @@ async function loadAudioSources() {
         elements.sceneAudioMixer.appendChild(audioChannel);
       }
     }
+    
+    if (focusedAudioInputName) {
+      setFocusedAudioInput(focusedAudioInputName);
+    }
   } catch (error) {
     console.error('Failed to load audio sources:', error);
     elements.globalAudioMixer.innerHTML = '<div class="empty-state">Failed to load audio sources</div>';
@@ -1897,6 +2544,7 @@ async function loadAudioSources() {
 async function createAudioChannel(inputName, inputKind = 'unknown') {
   const channel = document.createElement('div');
   channel.className = 'audio-channel';
+  channel.dataset.audioInput = inputName;
   
   try {
     const { inputMuted, inputVolumeDb } = await obs.call('GetInputMute', { inputName });
@@ -1940,6 +2588,10 @@ async function createAudioChannel(inputName, inputKind = 'unknown') {
       setVolume(inputName, percent);
     });
     
+    channel.addEventListener('click', () => {
+      setFocusedAudioInput(inputName, channel);
+    });
+    
     // Start audio level monitoring
     startAudioLevelMonitoring(inputName);
   } catch (error) {
@@ -1947,6 +2599,79 @@ async function createAudioChannel(inputName, inputKind = 'unknown') {
   }
   
   return channel;
+}
+
+function setFocusedAudioInput(inputName, channelElement) {
+  document.querySelectorAll('.audio-channel.hotkey-focus').forEach(el => el.classList.remove('hotkey-focus'));
+  focusedAudioInputName = inputName;
+  if (channelElement) {
+    channelElement.classList.add('hotkey-focus');
+  } else {
+    const el = document.querySelector(`.audio-channel[data-audio-input="${inputName}"]`);
+    if (el) el.classList.add('hotkey-focus');
+  }
+}
+
+function ensureFocusedAudioInput() {
+  if (focusedAudioInputName) {
+    const existing = document.querySelector(`.audio-channel[data-audio-input="${focusedAudioInputName}"]`);
+    if (existing) {
+      existing.classList.add('hotkey-focus');
+      return focusedAudioInputName;
+    }
+  }
+  
+  const fallback = document.querySelector('.audio-channel[data-audio-input]');
+  if (fallback) {
+    setFocusedAudioInput(fallback.dataset.audioInput, fallback);
+    return focusedAudioInputName;
+  }
+  return null;
+}
+
+async function adjustFocusedVolume(deltaPercent) {
+  const inputName = ensureFocusedAudioInput();
+  if (!inputName) {
+    console.warn('Select an audio channel to adjust volume.');
+    return;
+  }
+  try {
+    const { inputVolumeDb } = await obs.call('GetInputVolume', { inputName });
+    let percent = dbToPercent(inputVolumeDb);
+    percent = Math.min(100, Math.max(0, percent + deltaPercent));
+    await setVolume(inputName, percent);
+    
+    const slider = document.querySelector(`.volume-slider[data-input="${inputName}"]`);
+    if (slider) {
+      slider.value = percent;
+      const valueEl = slider.parentElement?.querySelector('.volume-value');
+      if (valueEl) valueEl.textContent = `${Math.round(percent)}%`;
+    }
+  } catch (error) {
+    console.error('Failed to adjust volume:', error);
+  }
+}
+
+async function toggleFocusedMute() {
+  const inputName = ensureFocusedAudioInput();
+  if (!inputName) {
+    console.warn('Select an audio channel to toggle mute.');
+    return;
+  }
+  try {
+    const { inputMuted } = await obs.call('GetInputMute', { inputName });
+    const newState = !inputMuted;
+    await obs.call('SetInputMute', { inputName, inputMuted: newState });
+    
+    const button = document.querySelector(`.mute-btn[data-input="${inputName}"]`);
+    if (button) {
+      button.classList.toggle('muted', newState);
+      const icon = button.querySelector('i');
+      if (icon) icon.className = newState ? 'fas fa-volume-mute' : 'fas fa-volume-up';
+    }
+  } catch (error) {
+    console.error('Failed to toggle mute:', error);
+  }
 }
 
 // Get icon for audio source type
@@ -2533,6 +3258,10 @@ function resetUI() {
   
   elements.studioModeToggle.checked = false;
   updateStudioModeUI();
+  
+  // Clear cached scene order for hotkeys
+  sceneHotkeyOrder = [];
+  focusedAudioInputName = null;
 }
 
 function clearIntervals() {
@@ -2650,3 +3379,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerGlobalShortcuts();
   await init();
 });
+function showToast(message) {
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-hide');
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}
