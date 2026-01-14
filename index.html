@@ -17,6 +17,9 @@
       </div>
       <div class="header-right">
         <div class="connection-panel">
+          <button id="open-settings-btn" class="btn-icon" title="Settings">
+            <i class="fas fa-sliders-h"></i>
+          </button>
           <div class="connection-selector">
             <select id="saved-connections" class="connection-dropdown">
               <option value="">-- New Connection --</option>
@@ -321,6 +324,97 @@
       <div class="modal-footer">
         <button id="dialog-cancel-btn" class="btn btn-secondary">Cancel</button>
         <button id="dialog-save-btn" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings / Preferences Panel -->
+  <div id="settings-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-dialog wide">
+      <div class="modal-header">
+        <h3><i class="fas fa-sliders-h"></i> Settings</h3>
+        <button id="settings-close-btn" class="btn-icon"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h4>Polling & Ranges</h4>
+            <label>Stats Interval (ms)</label>
+            <input type="number" id="settings-stats-interval" min="500" step="100">
+            <label>Sync Interval (ms)</label>
+            <input type="number" id="settings-sync-interval" min="500" step="100">
+            <label>Meter Range (dB)</label>
+            <div class="inline-inputs">
+              <input type="number" id="settings-min-db" step="1">
+              <span class="inline-separator">to</span>
+              <input type="number" id="settings-max-db" step="1">
+            </div>
+          </div>
+          <div class="settings-card">
+            <h4>Theme</h4>
+            <label>Accent Color</label>
+            <input type="color" id="settings-accent">
+            <label>Background Tone</label>
+            <select id="settings-theme-mode">
+              <option value="dark">Dark</option>
+              <option value="dim">Dim</option>
+            </select>
+          </div>
+          <div class="settings-card">
+            <h4>Auto-Reconnect</h4>
+            <label class="checkbox-row">
+              <input type="checkbox" id="settings-auto-reconnect">
+              <span>Enable auto-reconnect</span>
+            </label>
+            <label>Delay (ms)</label>
+            <input type="number" id="settings-reconnect-delay" min="500" step="100">
+            <label>Jitter (ms)</label>
+            <input type="number" id="settings-reconnect-jitter" min="0" step="50">
+            <label>Max Attempts</label>
+            <input type="number" id="settings-reconnect-attempts" min="1" step="1">
+          </div>
+          <div class="settings-card">
+            <h4>Default Connection</h4>
+            <label>Use on launch</label>
+            <select id="settings-default-connection">
+              <option value="">None</option>
+            </select>
+          </div>
+          <div class="settings-card shortcuts-card">
+            <h4>Shortcuts</h4>
+            <div class="shortcut-row">
+              <span>Connect / Disconnect</span>
+              <input type="text" data-action="toggleConnect" class="shortcut-input">
+            </div>
+            <div class="shortcut-row">
+              <span>Start / Stop Stream</span>
+              <input type="text" data-action="toggleStream" class="shortcut-input">
+            </div>
+            <div class="shortcut-row">
+              <span>Start / Stop Record</span>
+              <input type="text" data-action="toggleRecord" class="shortcut-input">
+            </div>
+            <div class="shortcut-row">
+              <span>Toggle Studio Mode</span>
+              <input type="text" data-action="toggleStudioMode" class="shortcut-input">
+            </div>
+            <div class="shortcut-row">
+              <span>Trigger Transition</span>
+              <input type="text" data-action="triggerTransition" class="shortcut-input">
+            </div>
+            <label>Import / Export JSON</label>
+            <textarea id="shortcut-json" class="modal-input" rows="3" placeholder='{"toggleStream": "Ctrl+Shift+S"}'></textarea>
+            <div class="shortcut-actions">
+              <button id="shortcut-reset-btn" class="btn btn-secondary">Reset Defaults</button>
+              <button id="shortcut-export-btn" class="btn btn-secondary">Export</button>
+              <button id="shortcut-import-btn" class="btn btn-primary">Import</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="settings-cancel-btn" class="btn btn-secondary">Cancel</button>
+        <button id="settings-save-btn" class="btn btn-primary">Save</button>
       </div>
     </div>
   </div>

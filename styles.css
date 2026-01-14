@@ -1262,9 +1262,21 @@ body {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
+.modal-dialog.wide {
+  width: 860px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
 .modal-header {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .modal-header h3 {
@@ -1303,10 +1315,98 @@ body {
   box-shadow: 0 0 0 2px rgba(0, 132, 255, 0.2);
 }
 
+.modal-dialog.wide .modal-body {
+  overflow-y: auto;
+  max-height: 60vh;
+}
+
 .modal-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--border-color);
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.settings-card {
+  background-color: var(--dark-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-card h4 {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.settings-card input[type="number"],
+.settings-card input[type="color"],
+.settings-card select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background-color: var(--panel-bg);
+  color: var(--text-primary);
+}
+
+.settings-card select:focus,
+.settings-card input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.inline-inputs {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: center;
+}
+
+.inline-separator {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.shortcuts-card .shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shortcut-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background-color: var(--panel-bg);
+  color: var(--text-primary);
+}
+
+.shortcut-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }

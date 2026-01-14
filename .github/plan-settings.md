@@ -6,4 +6,3 @@
   2. Build settings UI (modal/drawer) to edit values; persist to localStorage; live-apply CSS vars for theme and reinitialize timers and meter ranges on change.
   3. Wire auto-reconnect and default connection into connection lifecycle; expose reconnect delay/jitter.
   4. Add shortcut editor that writes to shortcut map; provide reset-to-defaults and import/export JSON.
-
