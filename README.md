@@ -105,6 +105,13 @@ npm run build:all
 
 Built applications will be in the `dist/` directory.
 
+## Release Automation
+
+- Pushes to `main` trigger a release with semantic version tags (`vMAJOR.MINOR.PATCH`).
+- The next version is calculated from the latest tag and the commit messages on the branch.
+- Include one of the keywords **#major**, **#minor**, or **#patch** in your commit message to choose the bump level (highest keyword wins).
+- If no keyword is present, the release workflow will stop and request one.
+
 ## Usage
 
 1. **Launch the Application**
