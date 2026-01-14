@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings • OBS Remote Control</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="settings-page">
+  <div class="settings-shell">
+    <header class="settings-header">
+      <div>
+        <p class="settings-eyebrow">OBS Remote Control</p>
+        <h1>Settings</h1>
+        <p class="settings-subtitle">Configure hotkeys, notifications, and layout density.</p>
+      </div>
+      <div class="settings-actions">
+        <button id="settings-close-btn" class="btn btn-secondary">
+          <i class="fas fa-times"></i> Close
+        </button>
+      </div>
+    </header>
+
+    <main class="settings-grid">
+      <section class="settings-card">
+        <div class="settings-card__header">
+          <div class="settings-card__title">
+            <i class="fas fa-th-large"></i>
+            <div>
+              <h2>Layout & Density</h2>
+              <p>Choose compact or expanded UI and sidebar widths.</p>
+            </div>
+          </div>
+          <div class="settings-card__actions">
+            <button id="settings-layout-reset" class="btn-icon" title="Reset presets to default">
+              <i class="fas fa-undo"></i>
+            </button>
+          </div>
+        </div>
+        <div class="settings-form">
+          <div class="form-row">
+            <label for="settings-layout-preset">Preset</label>
+            <div class="form-inline">
+              <select id="settings-layout-preset" class="layout-dropdown"></select>
+              <button id="settings-layout-save" class="btn btn-secondary btn-compact" title="Save preset">
+                <i class="fas fa-save"></i>
+              </button>
+              <button id="settings-layout-delete" class="btn btn-secondary btn-compact" title="Delete preset">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="settings-layout-density">Density</label>
+            <select id="settings-layout-density" class="layout-dropdown density-dropdown">
+              <option value="expanded">Expanded</option>
+              <option value="compact">Compact</option>
+            </select>
+          </div>
+          <div class="form-row two-col">
+            <div class="form-field">
+              <label for="settings-sidebar-left">Left Sidebar Width (px)</label>
+              <input type="number" id="settings-sidebar-left" class="layout-size-input" min="200" max="420" step="10" value="280">
+            </div>
+            <div class="form-field">
+              <label for="settings-sidebar-right">Right Sidebar Width (px)</label>
+              <input type="number" id="settings-sidebar-right" class="layout-size-input" min="200" max="420" step="10" value="300">
+            </div>
+          </div>
+          <div class="settings-card__footer">
+            <button id="settings-layout-apply" class="btn btn-primary">
+              <i class="fas fa-check"></i> Apply Layout
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-card__header">
+          <div class="settings-card__title">
+            <i class="fas fa-keyboard"></i>
+            <div>
+              <h2>Hotkeys</h2>
+              <p>Customize keyboard shortcuts for quick control.</p>
+            </div>
+          </div>
+          <div class="settings-card__actions">
+            <label class="hotkey-toggle">
+              <input type="checkbox" id="settings-hotkeys-enabled" checked>
+              <span>Enabled</span>
+            </label>
+            <button id="settings-hotkeys-reset" class="btn-icon" title="Restore default hotkeys">
+              <i class="fas fa-undo"></i>
+            </button>
+          </div>
+        </div>
+        <div class="settings-form hotkey-settings">
+          <div id="settings-hotkey-conflict" class="hotkey-conflict hidden"></div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-scene-mod">Scenes (1-9 modifier)</label>
+            <input id="settings-hotkey-scene-mod" data-hotkey-action="sceneModifier" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-stream">Start/Stop Stream</label>
+            <input id="settings-hotkey-stream" data-hotkey-action="streamToggle" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-record">Start/Stop Record</label>
+            <input id="settings-hotkey-record" data-hotkey-action="recordToggle" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-studio">Toggle Studio Mode</label>
+            <input id="settings-hotkey-studio" data-hotkey-action="studioToggle" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-transition">Trigger Transition</label>
+            <input id="settings-hotkey-transition" data-hotkey-action="transition" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-volume-up">Volume Up (focused)</label>
+            <input id="settings-hotkey-volume-up" data-hotkey-action="volumeUp" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-volume-down">Volume Down (focused)</label>
+            <input id="settings-hotkey-volume-down" data-hotkey-action="volumeDown" class="hotkey-input" type="text" readonly>
+          </div>
+          <div class="hotkey-row">
+            <label for="settings-hotkey-mute">Mute/Unmute (focused)</label>
+            <input id="settings-hotkey-mute" data-hotkey-action="muteFocused" class="hotkey-input" type="text" readonly>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-card">
+        <div class="settings-card__header">
+          <div class="settings-card__title">
+            <i class="fas fa-bell"></i>
+            <div>
+              <h2>Notifications</h2>
+              <p>Select which alerts you want to see.</p>
+            </div>
+          </div>
+        </div>
+        <div class="settings-form notifications-panel">
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-dnd">
+            <span>Do Not Disturb</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-connection" checked>
+            <span>Connection</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-stream" checked>
+            <span>Streaming</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-record" checked>
+            <span>Recording</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-scene" checked>
+            <span>Scenes</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" id="settings-notify-error" checked>
+            <span>Errors</span>
+          </label>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

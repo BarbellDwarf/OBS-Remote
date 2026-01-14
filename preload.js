@@ -23,5 +23,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     removeAllListeners: () => {
       ipcRenderer.removeAllListeners('obs:event');
     }
+  },
+
+  settings: {
+    open: () => ipcRenderer.invoke('settings:open')
   }
 });

@@ -134,6 +134,7 @@ let activeThumbnailRequests = 0;
 let thumbnailRefreshInterval = null;
 let thumbnailQueueSet = new Set();
 const DEFAULT_THUMBNAIL_INTERVAL = 10; // seconds
+let currentPreviewScene = null;
 
 // DOM Elements - with null checks for missing elements
 const elements = {
@@ -183,30 +184,14 @@ const elements = {
   hotkeysEnabled: document.getElementById('hotkeys-enabled'),
   hotkeyRestoreBtn: document.getElementById('hotkey-restore-btn'),
   hotkeyInputs: document.querySelectorAll('[data-hotkey-action]'),
-  hotkeyConflict: document.getElementById('hotkey-conflict')
-};
-
-let hotkeySettings = null;
+  hotkeyConflict: document.getElementById('hotkey-conflict'),
   toastContainer: document.getElementById('toast-container'),
   notifyDnd: document.getElementById('notify-dnd'),
   notifyConnection: document.getElementById('notify-connection'),
   notifyStream: document.getElementById('notify-stream'),
   notifyRecord: document.getElementById('notify-record'),
   notifyScene: document.getElementById('notify-scene'),
-  notifyError: document.getElementById('notify-error')
-};
-
-const notificationDefaults = {
-  dnd: false,
-  connection: true,
-  stream: true,
-  record: true,
-  scene: true,
-  error: true
-};
-
-let notificationSettings = { ...notificationDefaults };
-const lastToastTimestamps = {};
+  notifyError: document.getElementById('notify-error'),
   recordingsList: document.getElementById('recordings-list'),
   refreshRecordings: document.getElementById('refresh-recordings'),
   layoutPresetSelect: document.getElementById('layout-preset-select'),
@@ -242,6 +227,27 @@ const lastToastTimestamps = {};
   thumbnailToggle: document.getElementById('thumbnail-toggle'),
   thumbnailInterval: document.getElementById('thumbnail-interval')
 };
+
+// Bind settings opener immediately so first click works even before init completes
+if (elements.openSettingsBtn && window.electronAPI?.settings?.open) {
+  elements.openSettingsBtn.addEventListener('click', () => {
+    window.electronAPI.settings.open();
+  });
+}
+
+let hotkeySettings = null;
+
+const notificationDefaults = {
+  dnd: false,
+  connection: true,
+  stream: true,
+  record: true,
+  scene: true,
+  error: true
+};
+
+let notificationSettings = { ...notificationDefaults };
+const lastToastTimestamps = {};
 
 const DEFAULT_LAYOUT_PRESETS = {
   expanded: { id: 'expanded', name: 'Expanded', density: 'expanded', sidebarLeft: 280, sidebarRight: 300 },
@@ -538,6 +544,7 @@ async function init() {
     setupNotificationSettingsListeners();
     loadStatsSettings();
     initializeLayoutPresets();
+    window.addEventListener('storage', handleStorageSync);
     console.log('OBS Remote Control initialized successfully');
   } catch (error) {
     console.error('Initialization error:', error);
@@ -855,23 +862,6 @@ async function handleHotkey(event) {
   if (elements.saveLayoutPresetBtn) elements.saveLayoutPresetBtn.addEventListener('click', saveCustomLayoutPreset);
   if (elements.deleteLayoutPresetBtn) elements.deleteLayoutPresetBtn.addEventListener('click', deleteSelectedLayoutPreset);
   if (elements.resetLayoutPresetBtn) elements.resetLayoutPresetBtn.addEventListener('click', resetLayoutPresetsToDefault);
-
-  if (elements.openSettingsBtn) elements.openSettingsBtn.addEventListener('click', showSettingsModal);
-  if (elements.settingsCloseBtn) elements.settingsCloseBtn.addEventListener('click', hideSettingsModal);
-  if (elements.settingsCancelBtn) elements.settingsCancelBtn.addEventListener('click', hideSettingsModal);
-  if (elements.settingsSaveBtn) elements.settingsSaveBtn.addEventListener('click', () => {
-    const next = collectSettingsFromUI();
-    if (!next) return;
-    preferences = next;
-    savePreferences(preferences);
-    applyPreferences();
-    updateShortcutJsonTextarea();
-    if (isConnected) {
-      startStatsPolling();
-      startBidirectionalSync();
-    }
-    hideSettingsModal();
-  });
   if (elements.shortcutInputs) {
     elements.shortcutInputs.forEach(input => {
       input.addEventListener('keydown', handleShortcutInputKeydown);
@@ -1059,7 +1049,6 @@ function sanitizePreset(preset) {
 }
 
 function applyLayoutPreset(presetId) {
-  if (!elements.layoutPresetSelect) return;
   if (presetId === '__custom') {
     applyLayoutFromInputs(false);
     localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
@@ -1079,8 +1068,8 @@ function applyLayoutPreset(presetId) {
   if (elements.sidebarLeftWidth) elements.sidebarLeftWidth.value = leftWidth;
   if (elements.sidebarRightWidth) elements.sidebarRightWidth.value = rightWidth;
 
-  if (elements.layoutPresetSelect.value !== presetId) {
-    const optionExists = Array.from(elements.layoutPresetSelect.options).some(opt => opt.value === presetId);
+  if (elements.layoutPresetSelect && elements.layoutPresetSelect.value !== presetId) {
+    const optionExists = Array.from(elements.layoutPresetSelect.options || []).some(opt => opt.value === presetId);
     if (optionExists) {
       elements.layoutPresetSelect.value = presetId;
     }
@@ -1090,6 +1079,10 @@ function applyLayoutPreset(presetId) {
 }
 
 function applyLayoutFromInputs(markCustom) {
+  if (!elements.layoutDensitySelect && !elements.sidebarLeftWidth && !elements.sidebarRightWidth) {
+    return;
+  }
+
   const density = elements.layoutDensitySelect ? elements.layoutDensitySelect.value : 'expanded';
   const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
   const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
@@ -1110,6 +1103,29 @@ function applyLayoutFromInputs(markCustom) {
     localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
   } else if (elements.layoutPresetSelect && elements.layoutPresetSelect.value === '__custom') {
     localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
+  }
+}
+
+function handleStorageSync(event) {
+  switch (event.key) {
+    case HOTKEY_STORAGE_KEY: {
+      hotkeySettings = loadHotkeySettings();
+      applyHotkeySettingsToUI();
+      break;
+    }
+    case 'notificationSettings': {
+      loadNotificationSettings();
+      break;
+    }
+    case LAYOUT_PRESETS_KEY:
+    case ACTIVE_LAYOUT_PRESET_KEY: {
+      layoutPresets = loadStoredLayoutPresets();
+      const activePresetId = localStorage.getItem(ACTIVE_LAYOUT_PRESET_KEY) || 'expanded';
+      applyLayoutPreset(layoutPresets[activePresetId] ? activePresetId : 'expanded');
+      break;
+    }
+    default:
+      break;
   }
 }
 
@@ -1437,23 +1453,37 @@ function setupNotificationSettingsListeners() {
 }
 
 function shouldNotify(category) {
-  if (!elements.toastContainer) return false;
   if (notificationSettings.dnd) return false;
   return notificationSettings[category] !== false;
 }
 
+function getToastContainer() {
+  if (elements.toastContainer) return elements.toastContainer;
+  if (toastContainer) return toastContainer;
+  const container = document.createElement('div');
+  container.id = 'toast-container';
+  container.className = 'toast-container';
+  document.body.appendChild(container);
+  toastContainer = container;
+  elements.toastContainer = container;
+  return container;
+}
+
 function showToast(category, message, options = {}) {
-  if (!elements.toastContainer) return;
   if (!shouldNotify(category)) return;
 
+  const container = getToastContainer();
+  if (!container) return;
+
   const severity = options.severity || 'info';
-  const title = options.title || {
+  const defaultTitleMap = {
     connection: 'Connection',
     stream: 'Streaming',
     record: 'Recording',
     scene: 'Scene',
     error: 'Error'
-  }[category] || 'Notification';
+  };
+  const title = options.title || defaultTitleMap[category] || (message || 'Notification');
   const key = `${category}:${message}`;
   const now = Date.now();
   if (lastToastTimestamps[key] && now - lastToastTimestamps[key] < 1500) {
@@ -1488,14 +1518,23 @@ function showToast(category, message, options = {}) {
   content.appendChild(titleEl);
   content.appendChild(messageEl);
 
+  if (options.details) {
+    const detailEl = document.createElement('div');
+    detailEl.className = 'toast-detail';
+    detailEl.textContent = options.details;
+    content.appendChild(detailEl);
+  }
+
   toast.appendChild(icon);
   toast.appendChild(content);
 
-  elements.toastContainer.appendChild(toast);
+  container.appendChild(toast);
 
+  const duration = options.duration || 4000;
   setTimeout(() => {
-    toast.remove();
-  }, options.duration || 4000);
+    toast.classList.add('toast-hide');
+    setTimeout(() => toast.remove(), 220);
+  }, duration);
 }
 
 // Connection handling
@@ -1544,7 +1583,8 @@ async function connect(connectionOpts = null) {
     elements.connectBtn.disabled = false;
     elements.connectBtn.classList.remove('btn-primary');
     elements.connectBtn.classList.add('btn-danger');
-    showToast('connection', 'Connected to OBS', { severity: 'success', title: 'Connected' });
+    const hostLabel = `${host || 'unknown'}:${port || ''}`;
+    showToast('connection', `Connected to OBS at ${hostLabel}`, { severity: 'success', title: 'Connected', details: 'Status: Connected' });
     
     saveSettings();
     await initializeOBSConnection();
@@ -1566,7 +1606,8 @@ async function connect(connectionOpts = null) {
       errorMessage += '\n\nMake sure:\n• OBS Studio is running\n• WebSocket server is enabled in OBS\n• Host and port are correct';
     }
     alert(errorMessage);
-    showToast('error', errorMessage, { severity: 'error', title: 'Connection failed', duration: 5000 });
+    const hostLabel = `${host || 'unknown'}:${port || ''}`;
+    showToast('error', `Failed to connect to ${hostLabel}: ${errorMessage}`, { severity: 'error', title: 'Connection failed', duration: 5000, details: `Host: ${hostLabel}` });
   }
 }
 
@@ -1580,7 +1621,8 @@ async function disconnect() {
     }
     resetConnectionUI();
     console.log('Disconnected successfully');
-    showToast('connection', 'Disconnected from OBS', { severity: 'info', title: 'Disconnected' });
+    const hostLabel = lastConnectionDetails ? `${lastConnectionDetails.host}:${lastConnectionDetails.port}` : 'unknown';
+    showToast('connection', `Disconnected from OBS (${hostLabel})`, { severity: 'info', title: 'Disconnected', details: 'Status: Disconnected' });
   } catch (error) {
     console.error('Disconnect error:', error);
     // Still reset UI even if disconnect fails
@@ -1643,16 +1685,19 @@ function setupOBSEventListeners() {
   obs.on('ConnectionClosed', () => {
     console.log('Connection to OBS closed');
     resetConnectionUI();
-    showToast('connection', 'Connection to OBS closed', { severity: 'warning', title: 'Connection closed' });
+    const hostLabel = lastConnectionDetails ? `${lastConnectionDetails.host}:${lastConnectionDetails.port}` : 'unknown';
+    showToast('connection', `OBS connection closed (${hostLabel})`, { severity: 'warning', title: 'Connection closed', details: 'Status: Closed' });
     scheduleAutoReconnect('closed');
   });
   
   obs.on('ConnectionError', (error) => {
     console.error('Connection error:', error);
     resetConnectionUI();
-    const message = 'Lost connection to OBS: ' + (error.message || 'Unknown error');
-    alert(message);
-    showToast('error', message, { severity: 'error', title: 'Connection error' });
+    const hostLabel = lastConnectionDetails ? `${lastConnectionDetails.host}:${lastConnectionDetails.port}` : 'unknown';
+    const message = `Lost connection to OBS (${hostLabel})`; 
+    const detail = error?.message ? `Reason: ${error.message}` : 'Reason: Unknown';
+    alert(`${message}: ${error.message || 'Unknown error'}`);
+    showToast('error', message, { severity: 'error', title: 'Connection error', details: detail });
     alert('Lost connection to OBS: ' + (error.message || 'Unknown error'));
     scheduleAutoReconnect('error');
   });
@@ -1667,7 +1712,7 @@ function setupOBSEventListeners() {
     }
     // Refresh audio mixer to show scene-specific audio
     loadAudioSources();
-    showToast('scene', `Scene changed to ${data.sceneName}`, { severity: 'info', title: 'Scene changed' });
+    showToast('scene', `Scene changed to ${data.sceneName}`, { severity: 'info', title: 'Scene changed', details: 'Program output updated' });
   });
   
   obs.on('SceneListChanged', () => {
@@ -1680,8 +1725,10 @@ function setupOBSEventListeners() {
   
   // Preview scene changed event (studio mode)
   obs.on('CurrentPreviewSceneChanged', (data) => {
+    currentPreviewScene = data.sceneName;
     if (isStudioMode) {
       updateSceneIndicators();
+      updateActiveScene();
     }
   });
   
@@ -1689,8 +1736,9 @@ function setupOBSEventListeners() {
   obs.on('StreamStateChanged', (data) => {
     updateStreamButton(data.outputActive);
     const severity = data.outputActive ? 'success' : 'info';
-    const message = data.outputActive ? 'Streaming started' : 'Streaming stopped';
-    showToast('stream', message, { severity, title: 'Streaming' });
+    const message = data.outputActive ? 'Streaming is now Live' : 'Streaming stopped';
+    const details = data.outputActive ? 'Status: Live' : 'Status: Idle';
+    showToast('stream', message, { severity, title: 'Streaming', details });
   });
   
   // Recording events
@@ -1698,7 +1746,8 @@ function setupOBSEventListeners() {
     updateRecordButton(data.outputActive);
     const severity = data.outputActive ? 'success' : 'info';
     const message = data.outputActive ? 'Recording started' : 'Recording stopped';
-    showToast('record', message, { severity, title: 'Recording' });
+    const details = data.outputActive ? 'Status: Capturing' : 'Status: Idle';
+    showToast('record', message, { severity, title: 'Recording', details });
   });
   
   // Studio mode events
@@ -1709,16 +1758,11 @@ function setupOBSEventListeners() {
   
   // Audio level events (OBS WebSocket 5.x feature)
   obs.on('InputVolumeMeters', (data) => {
-    console.log('[InputVolumeMeters] Event received:', data ? 'YES' : 'NO');
     // data.inputs is an array of {inputName, inputLevelsMul: [[channels], [channels], ...]}
     if (data && data.inputs) {
-      console.log(`[InputVolumeMeters] Processing ${data.inputs.length} inputs`);
       data.inputs.forEach(input => {
-        console.log(`[InputVolumeMeters] Input: ${input.inputName}, Levels:`, input.inputLevelsMul);
         updateAudioMeter(input.inputName, input.inputLevelsMul);
       });
-    } else {
-      console.warn('[InputVolumeMeters] No data or inputs in event');
     }
   });
 }
@@ -1726,26 +1770,15 @@ function setupOBSEventListeners() {
 // Update audio meter with real OBS audio levels
 function updateAudioMeter(inputName, levelsMul) {
   const meter = document.querySelector(`.audio-meter[data-input="${inputName}"]`);
-  console.log(`[updateAudioMeter] Looking for meter with input="${inputName}", Found:`, meter ? 'YES' : 'NO');
-  
-  if (!meter) {
-    console.warn(`[updateAudioMeter] No meter element found for input "${inputName}"`);
-    return;
-  }
+  if (!meter) return;
   
   const bars = meter.querySelectorAll('.meter-bar');
-  console.log(`[updateAudioMeter] Found ${bars.length} meter bars for "${inputName}"`);
-  
-  if (bars.length === 0) {
-    console.warn(`[updateAudioMeter] No meter bars found in meter for "${inputName}"`);
-    return;
-  }
+  if (bars.length === 0) return;
   
   // levelsMul is an array of channel arrays: [[ch1_levels], [ch2_levels], ...]
   // Each channel has 3 values: [magnitude, peak, inputLevel]
   // We'll use the magnitude (index 0) from the first channel
   if (!levelsMul || levelsMul.length === 0) {
-    console.log(`[updateAudioMeter] No level data for "${inputName}", clearing meter`);
     // No audio data - clear meter
     bars.forEach(bar => bar.classList.remove('active', 'peak'));
     return;
@@ -1758,7 +1791,6 @@ function updateAudioMeter(inputName, levelsMul) {
   // Professional audio meters use dB scale for better visualization
   // dB = 20 * log10(magnitude), typically ranges from MIN_DB (quiet) to MAX_DB (peak)
   const dB = magnitude > 0 ? 20 * Math.log10(magnitude) : MIN_DB;
-  console.log(`[updateAudioMeter] "${inputName}" magnitude: ${magnitude.toFixed(3)}, dB: ${dB.toFixed(1)}`);
   
   // Map dB range (MIN_DB to MAX_DB) to meter bars (0 to totalBars)
   // MIN_DB or below = 0% (silent)
@@ -1769,7 +1801,6 @@ function updateAudioMeter(inputName, levelsMul) {
   const totalBars = bars.length;
   const dbNormalized = Math.max(0, Math.min(1, (dB - MIN_DB) / DB_RANGE)); // Normalize MIN_DB to MAX_DB => 0.0 to 1.0
   const activeCount = Math.round(dbNormalized * totalBars);
-  console.log(`[updateAudioMeter] "${inputName}" lighting ${activeCount}/${totalBars} bars (${(dbNormalized * 100).toFixed(0)}%)`);
   
   // Update meter bars
   bars.forEach((bar, index) => {
@@ -1841,11 +1872,20 @@ function createSceneItem(sceneName) {
 
 function updateActiveScene() {
   document.querySelectorAll('#scenes-list .list-item').forEach(item => {
-    if (item.dataset.sceneName === currentScene) {
-      item.classList.add('active');
-      loadSceneSources(currentScene);
-    } else {
+    const sceneName = item.dataset.sceneName;
+    const isProgram = sceneName === currentScene;
+    const isPreview = isStudioMode && sceneName === currentPreviewScene;
+
+    if (isStudioMode) {
       item.classList.remove('active');
+      item.classList.toggle('program-scene', isProgram);
+      item.classList.toggle('preview-scene', isPreview);
+    } else {
+      item.classList.remove('program-scene', 'preview-scene');
+      item.classList.toggle('active', isProgram);
+      if (isProgram && currentScene) {
+        loadSceneSources(currentScene);
+      }
     }
   });
 }
@@ -1854,6 +1894,8 @@ async function setScene(sceneName) {
   try {
     if (isStudioMode) {
       await obs.call('SetCurrentPreviewScene', { sceneName });
+      currentPreviewScene = sceneName;
+      updateActiveScene();
     } else {
       await obs.call('SetCurrentProgramScene', { sceneName });
       currentScene = sceneName;
@@ -2012,11 +2054,19 @@ function updateSceneThumbnail(sceneName) {
       setThumbnailPlaceholder(box, false);
       return;
     }
-    if (entry && entry.status === 'loaded' && entry.data) {
-      const img = document.createElement('img');
-      img.src = `data:image/jpeg;base64,${entry.data}`;
-      img.alt = `${sceneName} thumbnail`;
-      box.replaceChildren(img);
+    if (entry && entry.status === 'loaded' && entry.data && entry.data.length > 0) {
+      // Strip any accidental data URI prefix and ensure we only have raw base64
+      const base64Data = entry.data.startsWith('data:image')
+        ? (entry.data.split(',')[1] || '')
+        : entry.data;
+      if (base64Data) {
+        const img = document.createElement('img');
+        img.src = `data:image/jpeg;base64,${base64Data}`;
+        img.alt = `${sceneName} thumbnail`;
+        box.replaceChildren(img);
+      } else {
+        setThumbnailPlaceholder(box, false);
+      }
     } else if (entry && entry.status === 'loading') {
       setThumbnailPlaceholder(box, true);
     } else {
@@ -2479,7 +2529,10 @@ async function loadAudioSources() {
     
     // Filter for audio inputs - check if they have audio tracks
     const audioInputs = [];
+    const seenInputs = new Set();
     for (const input of inputs) {
+      // Avoid duplicate entries if OBS returns the same input multiple times
+      if (seenInputs.has(input.inputName)) continue;
       try {
         // Check if this input has audio by trying to get its settings
         // Audio sources will have volume controls available
@@ -2499,6 +2552,7 @@ async function loadAudioSources() {
           const isInScene = sceneSourceNames.has(input.inputName);
           
           audioInputs.push({ ...input, inputKind, isInScene });
+          seenInputs.add(input.inputName);
         }
       } catch (e) {
         // Input doesn't have audio or doesn't exist anymore
@@ -2769,13 +2823,15 @@ async function toggleStreaming() {
 }
 
 function updateStreamButton(isStreaming) {
+  if (!elements.streamBtn) return;
+
+  elements.streamBtn.classList.remove('btn-live', 'btn-success', 'btn-danger');
+
   if (isStreaming) {
     elements.streamBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Streaming';
-    elements.streamBtn.classList.remove('btn-success');
-    elements.streamBtn.classList.add('btn-danger');
+    elements.streamBtn.classList.add('btn-live');
   } else {
     elements.streamBtn.innerHTML = '<i class="fas fa-circle"></i> Start Streaming';
-    elements.streamBtn.classList.remove('btn-danger');
     elements.streamBtn.classList.add('btn-success');
   }
 }
@@ -2806,16 +2862,18 @@ async function toggleRecording() {
 }
 
 function updateRecordButton(isRecording) {
+  if (!elements.recordBtn) return;
+
+  elements.recordBtn.classList.remove('btn-recording', 'btn-secondary', 'btn-danger');
+
   if (isRecording) {
     elements.recordBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Recording';
-    elements.recordBtn.classList.remove('btn-danger');
-    elements.recordBtn.classList.add('btn-secondary');
-    elements.pauseRecordBtn.disabled = false;
+    elements.recordBtn.classList.add('btn-recording');
+    if (elements.pauseRecordBtn) elements.pauseRecordBtn.disabled = false;
   } else {
     elements.recordBtn.innerHTML = '<i class="fas fa-record-vinyl"></i> Start Recording';
-    elements.recordBtn.classList.remove('btn-secondary');
     elements.recordBtn.classList.add('btn-danger');
-    elements.pauseRecordBtn.disabled = true;
+    if (elements.pauseRecordBtn) elements.pauseRecordBtn.disabled = true;
   }
 }
 
@@ -2863,6 +2921,7 @@ async function updateStudioModeUI() {
     if (elements.singlePreview) elements.singlePreview.style.display = 'none';
     if (elements.studioPreview) elements.studioPreview.style.display = 'flex';
     if (elements.transitionBtn) elements.transitionBtn.disabled = false;
+    document.body.classList.add('studio-mode-active');
     
     // Show studio mode indicators
     const indicators = document.getElementById('studio-mode-indicators');
@@ -2874,6 +2933,7 @@ async function updateStudioModeUI() {
     if (elements.singlePreview) elements.singlePreview.style.display = 'flex';
     if (elements.studioPreview) elements.studioPreview.style.display = 'none';
     if (elements.transitionBtn) elements.transitionBtn.disabled = true;
+    document.body.classList.remove('studio-mode-active');
     
     // Hide studio mode indicators
     const indicators = document.getElementById('studio-mode-indicators');
@@ -2881,6 +2941,8 @@ async function updateStudioModeUI() {
       indicators.style.display = 'none';
     }
   }
+
+  updateActiveScene();
 }
 
 async function updateSceneIndicators() {
@@ -2889,6 +2951,7 @@ async function updateSceneIndicators() {
   try {
     // Get current program scene
     const { currentProgramSceneName } = await obs.call('GetSceneList');
+    currentScene = currentProgramSceneName;
     const programSceneEl = document.getElementById('program-scene-name');
     if (programSceneEl) {
       programSceneEl.textContent = currentProgramSceneName || 'No Scene';
@@ -2896,12 +2959,13 @@ async function updateSceneIndicators() {
     
     // Get current preview scene (studio mode only)
     const { currentPreviewSceneName } = await obs.call('GetCurrentPreviewScene');
+    currentPreviewScene = currentPreviewSceneName;
     const previewSceneEl = document.getElementById('preview-scene-name');
     if (previewSceneEl) {
       previewSceneEl.textContent = currentPreviewSceneName || 'No Scene';
     }
-    
-    console.log(`[Studio Mode] Program: ${currentProgramSceneName}, Preview: ${currentPreviewSceneName}`);
+
+    updateActiveScene();
   } catch (error) {
     console.error('Failed to update scene indicators:', error);
   }
@@ -3372,6 +3436,21 @@ function startBidirectionalSync() {
 
 // Initialize app when DOM is ready
 console.log('app.js loaded, waiting for DOMContentLoaded...');
+window.addEventListener('storage', (event) => {
+  if (event.key === SETTINGS_KEY) {
+    preferences = loadPreferences();
+    applyPreferences();
+    hotkeySettings = loadHotkeySettings();
+    applyHotkeySettingsToUI();
+    if (isConnected) {
+      startStatsPolling();
+      startBidirectionalSync();
+    }
+  }
+  if (event.key === 'obsConnections') {
+    refreshDefaultConnectionOptions();
+  }
+});
 document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired!');
   preferences = loadPreferences();
@@ -3379,18 +3458,3 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerGlobalShortcuts();
   await init();
 });
-function showToast(message) {
-  if (!toastContainer) {
-    toastContainer = document.createElement('div');
-    toastContainer.className = 'toast-container';
-    document.body.appendChild(toastContainer);
-  }
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  toastContainer.appendChild(toast);
-  setTimeout(() => {
-    toast.classList.add('toast-hide');
-    setTimeout(() => toast.remove(), 300);
-  }, 2500);
-}
