@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 
 let mainWindow;
+let settingsWindow;
 let OBSWebSocket;
 
 // Load OBS WebSocket in main process
@@ -41,6 +42,37 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+}
+
+function createSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.focus();
+    return settingsWindow;
+  }
+
+  settingsWindow = new BrowserWindow({
+    width: 960,
+    height: 780,
+    minWidth: 720,
+    minHeight: 640,
+    parent: mainWindow || null,
+    modal: false,
+    backgroundColor: '#1e1e1e',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+
+  settingsWindow.removeMenu();
+  settingsWindow.loadFile('settings.html');
+
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+
+  return settingsWindow;
 }
 
 // Store OBS instance in main process
@@ -132,6 +164,15 @@ function setupOBSEventForwarding() {
 ipcMain.handle('obs:setupEvents', () => {
   try {
     setupOBSEventForwarding();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('settings:open', () => {
+  try {
+    createSettingsWindow();
     return { success: true };
   } catch (error) {
     return { success: false, error: error.message };
