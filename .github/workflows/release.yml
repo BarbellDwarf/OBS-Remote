@@ -10,8 +10,85 @@ permissions:
   contents: write
 
 jobs:
+  determine-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next semantic version
+        id: version
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          TAG_LIST=$(git tag -l "v*" || true)
+          SEMVER_TAGS=$(echo "$TAG_LIST" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; })
+          LAST_VERSION=""
+          if [ -n "$SEMVER_TAGS" ]; then
+            LAST_VERSION=$(echo "$SEMVER_TAGS" | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+          fi
+          if [ -n "$LAST_VERSION" ]; then
+            RANGE="v${LAST_VERSION}..HEAD"
+            BASE_VERSION="$LAST_VERSION"
+          else
+            RANGE="HEAD"
+            BASE_VERSION=$(jq -r .version package.json)
+          fi
+
+          COMMITS=$(git log "$RANGE" --pretty=%s || true)
+
+          BUMP=""
+          MATCHED_KEYWORDS=$(echo "$COMMITS" | grep -Eio '#(major|minor|patch)' || true)
+          while IFS= read -r KEYWORD; do
+            case "${KEYWORD,,}" in
+              \#major)
+                BUMP="major"
+                break
+                ;;
+              \#minor)
+                if [ "$BUMP" != "major" ]; then
+                  BUMP="minor"
+                fi
+                ;;
+              \#patch)
+                if [ -z "$BUMP" ]; then
+                  BUMP="patch"
+                fi
+                ;;
+            esac
+          done <<< "$MATCHED_KEYWORDS"
+
+          if [ -z "$BUMP" ]; then
+            echo "No semver bump keyword found in commit messages ($RANGE). Add #major, #minor, or #patch to proceed." >&2
+            exit 1
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<<"$BASE_VERSION"
+          case "$BUMP" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+
+          NEXT_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "Next version: $NEXT_VERSION (bump: $BUMP from base $BASE_VERSION)"
+
+          {
+            echo "version=$NEXT_VERSION"
+            echo "tag=v$NEXT_VERSION"
+          } >> "$GITHUB_OUTPUT"
+
   build-linux:
     runs-on: ubuntu-latest
+    needs: determine-version
+    env:
+      RELEASE_VERSION: ${{ needs.determine-version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,6 +98,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Apply release version
+        run: node .github/scripts/apply-release-version.js
 
       - name: Install dependencies
         run: npm ci
@@ -40,6 +120,9 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    needs: determine-version
+    env:
+      RELEASE_VERSION: ${{ needs.determine-version.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,6 +132,10 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Apply release version
+        shell: bash
+        run: node .github/scripts/apply-release-version.js
 
       - name: Install dependencies
         run: npm ci
@@ -67,14 +154,12 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     needs:
+      - determine-version
       - build-linux
       - build-windows
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Read app version
-        run: echo "APP_VERSION=$(jq -r .version package.json)" >> $GITHUB_ENV
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4.1.3
@@ -86,7 +171,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.APP_VERSION }}-build.${{ github.run_number }}
-          name: Release v${{ env.APP_VERSION }} build ${{ github.run_number }}
+          tag_name: ${{ needs.determine-version.outputs.tag }}
+          name: ${{ needs.determine-version.outputs.tag }}
           generate_release_notes: true
           files: artifacts/**
