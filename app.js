@@ -49,6 +49,7 @@ const MAX_DB = 0;    // Maximum dB level (peak/clipping)
 const DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
 const PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
 const FILTER_CROP_MAX = 3840; // 4K UHD width; bounds typical HD/4K frame sizes
+let toastContainer = null;
 
 let obs = null;
 let isConnected = false;
@@ -862,7 +863,7 @@ function createFilterControls(sourceName, filter, container) {
     input.addEventListener('change', async (e) => {
       const raw = isInteger ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
       if (Number.isNaN(raw)) {
-        alert(`Enter a valid number between ${min} and ${max}.`);
+        showToast(`Enter a valid number between ${min} and ${max}.`);
         e.target.value = currentValue;
         return;
       }
@@ -922,7 +923,7 @@ async function setFilterEnabled(sourceName, filterName, enabled, container) {
     await obs.call('SetSourceFilterEnabled', { sourceName, filterName, filterEnabled: enabled });
   } catch (error) {
     console.error(`Failed to toggle filter "${filterName}" on ${sourceName}:`, error);
-    alert(`Failed to toggle filter "${filterName}": ` + error.message);
+    showToast(`Failed to toggle filter "${filterName}": ${error.message}`);
     if (container) {
       await renderSourceFilters(sourceName, container);
     }
@@ -938,7 +939,7 @@ async function updateFilterSetting(sourceName, filterName, partialSettings, cont
     });
   } catch (error) {
     console.error(`Failed to update filter settings for "${filterName}" on ${sourceName}:`, error);
-    alert(`Failed to update settings for filter "${filterName}": ` + error.message);
+    showToast(`Failed to update settings for filter "${filterName}": ${error.message}`);
     if (container) {
       await renderSourceFilters(sourceName, container);
     }
@@ -1675,3 +1676,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log('DOMContentLoaded event fired!');
   await init();
 });
+function showToast(message) {
+  if (!toastContainer) {
+    toastContainer = document.createElement('div');
+    toastContainer.className = 'toast-container';
+    document.body.appendChild(toastContainer);
+  }
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  toastContainer.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('toast-hide');
+    setTimeout(() => toast.remove(), 300);
+  }, 2500);
+}

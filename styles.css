@@ -511,6 +511,30 @@ body {
   border-radius: 50%;
 }
 
+.toast-container {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+}
+
+.toast {
+  background-color: #2b2b2b;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-hide {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .empty-state {
   padding: 40px 20px;
   text-align: center;
