@@ -44,9 +44,6 @@ class OBSWebSocketWrapper {
 }
 
 // Audio meter constants
-const MIN_DB = -60;  // Minimum dB level (silent/very quiet)
-const MAX_DB = 0;    // Maximum dB level (peak/clipping)
-const DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
 const DEFAULT_PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
 const MIN_STATS_INTERVAL_MS = 250;
 // Settings defaults
@@ -171,21 +168,8 @@ const elements = {
   resetLayoutPresetBtn: document.getElementById('reset-layout-preset'),
   layoutDensitySelect: document.getElementById('layout-density-select'),
   sidebarLeftWidth: document.getElementById('sidebar-left-width'),
-  sidebarRightWidth: document.getElementById('sidebar-right-width')
-};
-
-const DEFAULT_LAYOUT_PRESETS = {
-  expanded: { id: 'expanded', name: 'Expanded', density: 'expanded', sidebarLeft: 280, sidebarRight: 300 },
-  compact: { id: 'compact', name: 'Compact', density: 'compact', sidebarLeft: 240, sidebarRight: 240 }
-};
-
-const LAYOUT_PRESETS_KEY = 'obsLayoutPresets';
-const ACTIVE_LAYOUT_PRESET_KEY = 'obsActiveLayoutPreset';
-let layoutPresets = { ...DEFAULT_LAYOUT_PRESETS };
-
-const LAYOUT_LIMITS = {
-  min: 200,
-  max: 420
+  sidebarRightWidth: document.getElementById('sidebar-right-width'),
+  // Settings-related elements
   openSettingsBtn: document.getElementById('open-settings-btn'),
   settingsModal: document.getElementById('settings-modal'),
   settingsCloseBtn: document.getElementById('settings-close-btn'),
@@ -206,10 +190,24 @@ const LAYOUT_LIMITS = {
   shortcutJson: document.getElementById('shortcut-json'),
   shortcutResetBtn: document.getElementById('shortcut-reset-btn'),
   shortcutExportBtn: document.getElementById('shortcut-export-btn'),
-  shortcutImportBtn: document.getElementById('shortcut-import-btn')
+  shortcutImportBtn: document.getElementById('shortcut-import-btn'),
   refreshScenes: document.getElementById('refresh-scenes'),
   thumbnailToggle: document.getElementById('thumbnail-toggle'),
   thumbnailInterval: document.getElementById('thumbnail-interval')
+};
+
+const DEFAULT_LAYOUT_PRESETS = {
+  expanded: { id: 'expanded', name: 'Expanded', density: 'expanded', sidebarLeft: 280, sidebarRight: 300 },
+  compact: { id: 'compact', name: 'Compact', density: 'compact', sidebarLeft: 240, sidebarRight: 240 }
+};
+
+const LAYOUT_PRESETS_KEY = 'obsLayoutPresets';
+const ACTIVE_LAYOUT_PRESET_KEY = 'obsActiveLayoutPreset';
+let layoutPresets = { ...DEFAULT_LAYOUT_PRESETS };
+
+const LAYOUT_LIMITS = {
+  min: 200,
+  max: 420
 };
 
 // Preferences helpers
@@ -2255,7 +2253,6 @@ function startStatsPolling() {
       console.error('Failed to get stats:', error);
     }
   }, statsConfig.intervalMs);
-  }, intervalMs);
 }
 
 function updateStats(stats, streamStatus = {}, recordStatus = {}, now = Date.now()) {
