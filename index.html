@@ -42,6 +42,32 @@
             <span class="status-text">Disconnected</span>
           </div>
         </div>
+        <div class="layout-presets">
+          <div class="layout-group">
+            <label for="layout-preset-select" class="sr-only">Layout Preset</label>
+            <select id="layout-preset-select" class="layout-dropdown"></select>
+            <button id="save-layout-preset" class="btn-icon" title="Save Layout Preset">
+              <i class="fas fa-save"></i>
+            </button>
+            <button id="delete-layout-preset" class="btn-icon" title="Delete Layout Preset">
+              <i class="fas fa-trash"></i>
+            </button>
+            <button id="reset-layout-preset" class="btn-icon" title="Reset Layout Presets">
+              <i class="fas fa-undo"></i>
+            </button>
+          </div>
+          <div class="layout-group">
+            <label for="layout-density-select" class="sr-only">Density</label>
+            <select id="layout-density-select" class="layout-dropdown density-dropdown">
+              <option value="expanded">Expanded</option>
+              <option value="compact">Compact</option>
+            </select>
+            <label for="sidebar-left-width" class="sr-only">Left Sidebar Width</label>
+            <input type="number" id="sidebar-left-width" class="layout-size-input" min="200" max="420" step="10" value="280" title="Left Sidebar Width (px)">
+            <label for="sidebar-right-width" class="sr-only">Right Sidebar Width</label>
+            <input type="number" id="sidebar-right-width" class="layout-size-input" min="200" max="420" step="10" value="300" title="Right Sidebar Width (px)">
+          </div>
+        </div>
       </div>
     </header>
 
@@ -288,11 +314,6 @@
           </div>
         </div>
 
-        <!-- 
-          Recordings panel removed - OBS WebSocket doesn't provide recording list functionality
-          Code preserved for potential future use if WebSocket protocol adds this feature
-        -->
-        <!-- 
         <div class="panel">
           <div class="panel-header">
             <h2><i class="fas fa-folder-open"></i> Recordings</h2>
@@ -301,12 +322,11 @@
             </button>
           </div>
           <div class="panel-body">
-            <div id="recordings-list" class="recordings-list">
-              <div class="empty-state">No recordings found</div>
+            <div id="recordings-list" class="list-container recordings-list">
+              <div class="empty-state">Recordings list requires OBS connection</div>
             </div>
           </div>
         </div>
-        -->
       </aside>
     </main>
   </div>

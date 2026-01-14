@@ -135,6 +135,29 @@ const elements = {
   refreshCollections: document.getElementById('refresh-collections'),
   profilesList: document.getElementById('profiles-list'),
   refreshProfiles: document.getElementById('refresh-profiles'),
+  recordingsList: document.getElementById('recordings-list'),
+  refreshRecordings: document.getElementById('refresh-recordings'),
+  layoutPresetSelect: document.getElementById('layout-preset-select'),
+  saveLayoutPresetBtn: document.getElementById('save-layout-preset'),
+  deleteLayoutPresetBtn: document.getElementById('delete-layout-preset'),
+  resetLayoutPresetBtn: document.getElementById('reset-layout-preset'),
+  layoutDensitySelect: document.getElementById('layout-density-select'),
+  sidebarLeftWidth: document.getElementById('sidebar-left-width'),
+  sidebarRightWidth: document.getElementById('sidebar-right-width')
+};
+
+const DEFAULT_LAYOUT_PRESETS = {
+  expanded: { id: 'expanded', name: 'Expanded', density: 'expanded', sidebarLeft: 280, sidebarRight: 300 },
+  compact: { id: 'compact', name: 'Compact', density: 'compact', sidebarLeft: 240, sidebarRight: 240 }
+};
+
+const LAYOUT_PRESETS_KEY = 'obsLayoutPresets';
+const ACTIVE_LAYOUT_PRESET_KEY = 'obsActiveLayoutPreset';
+let layoutPresets = { ...DEFAULT_LAYOUT_PRESETS };
+
+const LAYOUT_LIMITS = {
+  min: 200,
+  max: 420
   openSettingsBtn: document.getElementById('open-settings-btn'),
   settingsModal: document.getElementById('settings-modal'),
   settingsCloseBtn: document.getElementById('settings-close-btn'),
@@ -435,6 +458,7 @@ async function init() {
     setupEventListeners();
     loadConnectionsList();
     loadSettings();
+    initializeLayoutPresets();
     console.log('OBS Remote Control initialized successfully');
   } catch (error) {
     console.error('Initialization error:', error);
@@ -462,6 +486,14 @@ function setupEventListeners() {
   if (elements.deleteConnectionBtn) elements.deleteConnectionBtn.addEventListener('click', deleteCurrentConnection);
   if (elements.refreshCollections) elements.refreshCollections.addEventListener('click', loadSceneCollections);
   if (elements.refreshProfiles) elements.refreshProfiles.addEventListener('click', loadProfiles);
+  if (elements.refreshRecordings) elements.refreshRecordings.addEventListener('click', loadRecordings);
+  if (elements.layoutPresetSelect) elements.layoutPresetSelect.addEventListener('change', (e) => applyLayoutPreset(e.target.value));
+  if (elements.layoutDensitySelect) elements.layoutDensitySelect.addEventListener('change', () => applyLayoutFromInputs(true));
+  if (elements.sidebarLeftWidth) elements.sidebarLeftWidth.addEventListener('input', () => applyLayoutFromInputs(true));
+  if (elements.sidebarRightWidth) elements.sidebarRightWidth.addEventListener('input', () => applyLayoutFromInputs(true));
+  if (elements.saveLayoutPresetBtn) elements.saveLayoutPresetBtn.addEventListener('click', saveCustomLayoutPreset);
+  if (elements.deleteLayoutPresetBtn) elements.deleteLayoutPresetBtn.addEventListener('click', deleteSelectedLayoutPreset);
+  if (elements.resetLayoutPresetBtn) elements.resetLayoutPresetBtn.addEventListener('click', resetLayoutPresetsToDefault);
 
   if (elements.openSettingsBtn) elements.openSettingsBtn.addEventListener('click', showSettingsModal);
   if (elements.settingsCloseBtn) elements.settingsCloseBtn.addEventListener('click', hideSettingsModal);
@@ -595,12 +627,217 @@ function loadSavedConnection() {
   }
 }
 
+// Layout presets
+function loadStoredLayoutPresets() {
+  let presets = { ...DEFAULT_LAYOUT_PRESETS };
+  const stored = localStorage.getItem(LAYOUT_PRESETS_KEY);
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored);
+      Object.values(parsed || {}).forEach((preset) => {
+        const sanitized = sanitizePreset(preset);
+        if (sanitized) {
+          presets[sanitized.id] = sanitized;
+        }
+      });
+    } catch (err) {
+      console.warn('Failed to parse stored layout presets', err);
+    }
+  }
+  return presets;
+}
+
+function saveLayoutPresets(presets) {
+  localStorage.setItem(LAYOUT_PRESETS_KEY, JSON.stringify(presets));
+}
+
+function populateLayoutPresetSelect() {
+  if (!elements.layoutPresetSelect) return;
+  elements.layoutPresetSelect.innerHTML = '';
+
+  const defaultsOrder = ['expanded', 'compact'];
+  const sorted = Object.values(layoutPresets).sort((a, b) => {
+    const aIndex = defaultsOrder.indexOf(a.id);
+    const bIndex = defaultsOrder.indexOf(b.id);
+    if (aIndex !== -1 || bIndex !== -1) {
+      return (aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex);
+    }
+    return a.name.localeCompare(b.name);
+  });
+
+  sorted.forEach((preset) => {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.name;
+    elements.layoutPresetSelect.appendChild(option);
+  });
+}
+
+function setDensityClass(density) {
+  const body = document.body;
+  if (!body) return;
+  body.classList.remove('density-compact', 'density-expanded');
+  body.classList.add(density === 'compact' ? 'density-compact' : 'density-expanded');
+}
+
+function clampSidebar(value) {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return LAYOUT_LIMITS.min;
+  return Math.min(LAYOUT_LIMITS.max, Math.max(LAYOUT_LIMITS.min, parsed));
+}
+
+function sanitizePreset(preset) {
+  if (!preset || typeof preset !== 'object') return null;
+  const density = preset.density === 'compact' ? 'compact' : 'expanded';
+  const sidebarLeft = clampSidebar(preset.sidebarLeft || LAYOUT_LIMITS.min);
+  const sidebarRight = clampSidebar(preset.sidebarRight || LAYOUT_LIMITS.min);
+  const id = preset.id && typeof preset.id === 'string' ? preset.id : null;
+  const name = preset.name && typeof preset.name === 'string' ? preset.name : null;
+  if (!id || !name) return null;
+  return { id, name, density, sidebarLeft, sidebarRight };
+}
+
+function applyLayoutPreset(presetId) {
+  if (!elements.layoutPresetSelect) return;
+  if (presetId === '__custom') {
+    applyLayoutFromInputs(false);
+    localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
+    return;
+  }
+
+  const preset = sanitizePreset(layoutPresets[presetId]) || DEFAULT_LAYOUT_PRESETS.expanded;
+  const density = preset.density || 'expanded';
+  const leftWidth = preset.sidebarLeft || 280;
+  const rightWidth = preset.sidebarRight || 300;
+
+  document.documentElement.style.setProperty('--sidebar-left', `${leftWidth}px`);
+  document.documentElement.style.setProperty('--sidebar-right', `${rightWidth}px`);
+  setDensityClass(density);
+
+  if (elements.layoutDensitySelect) elements.layoutDensitySelect.value = density;
+  if (elements.sidebarLeftWidth) elements.sidebarLeftWidth.value = leftWidth;
+  if (elements.sidebarRightWidth) elements.sidebarRightWidth.value = rightWidth;
+
+  if (elements.layoutPresetSelect.value !== presetId) {
+    const optionExists = Array.from(elements.layoutPresetSelect.options).some(opt => opt.value === presetId);
+    if (optionExists) {
+      elements.layoutPresetSelect.value = presetId;
+    }
+  }
+
+  localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, presetId);
+}
+
+function applyLayoutFromInputs(markCustom) {
+  const density = elements.layoutDensitySelect ? elements.layoutDensitySelect.value : 'expanded';
+  const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
+  const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
+
+  document.documentElement.style.setProperty('--sidebar-left', `${leftWidth}px`);
+  document.documentElement.style.setProperty('--sidebar-right', `${rightWidth}px`);
+  setDensityClass(density);
+
+  if (markCustom && elements.layoutPresetSelect) {
+    let customOption = elements.layoutPresetSelect.querySelector('option[value="__custom"]');
+    if (!customOption) {
+      customOption = document.createElement('option');
+      customOption.value = '__custom';
+      customOption.textContent = 'Custom (unsaved)';
+      elements.layoutPresetSelect.appendChild(customOption);
+    }
+    elements.layoutPresetSelect.value = '__custom';
+    localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
+  } else if (elements.layoutPresetSelect && elements.layoutPresetSelect.value === '__custom') {
+    localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, '__custom');
+  }
+}
+
+function saveCustomLayoutPreset() {
+  if (!elements.layoutPresetSelect) return;
+  showConnectionNameDialog('New Preset', (name) => {
+    if (!name) return;
+
+    const density = elements.layoutDensitySelect ? elements.layoutDensitySelect.value : 'expanded';
+    const leftWidth = elements.sidebarLeftWidth ? clampSidebar(elements.sidebarLeftWidth.value) : 280;
+    const rightWidth = elements.sidebarRightWidth ? clampSidebar(elements.sidebarRightWidth.value) : 300;
+
+    const id = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (!id) return;
+    if (['expanded', 'compact', '__custom'].includes(id)) {
+      notifyUser('Preset name is reserved (expanded, compact). Choose another name.');
+      return;
+    }
+
+    layoutPresets[id] = {
+      id,
+      name: name.trim(),
+      density,
+      sidebarLeft: leftWidth,
+      sidebarRight: rightWidth
+    };
+
+    saveLayoutPresets(layoutPresets);
+    populateLayoutPresetSelect();
+    applyLayoutPreset(id);
+  }, { title: 'Save Layout Preset', label: 'Preset Name:' });
+}
+
+function deleteSelectedLayoutPreset() {
+  if (!elements.layoutPresetSelect) return;
+  const selectedId = elements.layoutPresetSelect.value;
+  if (!selectedId || selectedId === '__custom') {
+    notifyUser('Only saved presets can be deleted. Select a saved preset first.');
+    return;
+  }
+  if (DEFAULT_LAYOUT_PRESETS[selectedId]) {
+    notifyUser('Default presets cannot be deleted.');
+    return;
+  }
+  delete layoutPresets[selectedId];
+  saveLayoutPresets(layoutPresets);
+  populateLayoutPresetSelect();
+  applyLayoutPreset('expanded');
+  localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, 'expanded');
+}
+
+function resetLayoutPresetsToDefault() {
+  layoutPresets = { ...DEFAULT_LAYOUT_PRESETS };
+  saveLayoutPresets(layoutPresets);
+  populateLayoutPresetSelect();
+  applyLayoutPreset('expanded');
+  localStorage.setItem(ACTIVE_LAYOUT_PRESET_KEY, 'expanded');
+}
+
+function initializeLayoutPresets() {
+  layoutPresets = loadStoredLayoutPresets();
+  populateLayoutPresetSelect();
+  const activePresetId = localStorage.getItem(ACTIVE_LAYOUT_PRESET_KEY) || 'expanded';
+  applyLayoutPreset(layoutPresets[activePresetId] ? activePresetId : 'expanded');
+}
+
+function notifyUser(message) {
+  if (elements.statusText) {
+    const previous = elements.statusText.textContent;
+    elements.statusText.textContent = message;
+    setTimeout(() => {
+      elements.statusText.textContent = previous;
+    }, 3000);
+  } else {
+    alert(message);
+  }
+}
+
 // Custom dialog function (replaces prompt() which doesn't work in Electron renderer)
-function showConnectionNameDialog(defaultValue, callback) {
+function showConnectionNameDialog(defaultValue, callback, options = {}) {
   const dialog = document.getElementById('connection-name-dialog');
   const input = document.getElementById('connection-name-input');
   const saveBtn = document.getElementById('dialog-save-btn');
   const cancelBtn = document.getElementById('dialog-cancel-btn');
+  const titleEl = dialog.querySelector('.modal-header h3');
+  const labelEl = dialog.querySelector('label[for="connection-name-input"]');
+
+  if (titleEl) titleEl.textContent = options.title || 'Save Connection';
+  if (labelEl) labelEl.textContent = options.label || 'Connection Name:';
   
   // Set default value
   input.value = defaultValue;
@@ -900,6 +1137,7 @@ async function initializeOBSConnection() {
       loadAudioSources(),
       loadSceneCollections(),
       loadProfiles(),
+      loadRecordings(),
       getStudioModeStatus(),
       getStreamingStatus(),
       getRecordingStatus(),
@@ -1943,8 +2181,10 @@ async function switchProfile(profileName) {
 // Recordings (removed - not supported by WebSocket)
 async function loadRecordings() {
   // OBS WebSocket doesn't provide a direct way to list recordings
-  // This function is kept for backwards compatibility but does nothing
   console.log('Recordings list not available via OBS WebSocket');
+  if (elements.recordingsList) {
+    elements.recordingsList.innerHTML = '<div class="empty-state">OBS WebSocket does not expose recordings list</div>';
+  }
 }
 
 // UI helpers
@@ -1959,9 +2199,10 @@ function enableControls() {
 function resetUI() {
   elements.scenesList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
   elements.sourcesList.innerHTML = '<div class="empty-state">Select a scene</div>';
-  elements.audioMixer.innerHTML = '<div class="empty-state">No audio sources available</div>';
+  if (elements.audioMixer) elements.audioMixer.innerHTML = '<div class="empty-state">No audio sources available</div>';
   if (elements.collectionsList) elements.collectionsList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
   if (elements.profilesList) elements.profilesList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
+  if (elements.recordingsList) elements.recordingsList.innerHTML = '<div class="empty-state">Recordings list requires OBS connection</div>';
   clearSceneThumbnails(true);
   stopThumbnailRefresh();
   
