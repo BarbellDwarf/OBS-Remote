@@ -6,10 +6,10 @@
   "scripts": {
     "start": "electron .",
     "dev": "NODE_ENV=development electron .",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux",
-    "build:all": "electron-builder --win --linux"
+    "build": "electron-builder --publish=never",
+    "build:win": "electron-builder --win --publish=never",
+    "build:linux": "electron-builder --linux --publish=never",
+    "build:all": "electron-builder --win --linux --publish=never"
   },
   "keywords": [
     "obs",
@@ -19,7 +19,7 @@
     "remote-control",
     "electron"
   ],
-  "author": "",
+  "author": "BarbellDwarf <78000963+BarbellDwarf@users.noreply.github.com>",
   "license": "MIT",
   "build": {
     "appId": "com.obsremote.app",
