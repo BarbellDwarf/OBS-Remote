@@ -54,6 +54,7 @@ See [USAGE.md](USAGE.md) for a step-by-step guide and [VISUAL_GUIDE.md](VISUAL_G
 
 - OBS WebSocket does **not** stream video frames; preview panels show placeholders. Use the OBS window to view video output.
 - Keyboard shortcuts are scoped to the app window (they are not global system hotkeys).
+- Recording list management is not available in the app; use OBS to browse recordings.
 
 ## Additional documentation
 
