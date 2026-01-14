@@ -91,6 +91,12 @@ let lastConnectionDetails = null;
 let autoReconnectTimeout = null;
 let userInitiatedDisconnect = false;
 let reconnectAttempts = 0;
+let sceneThumbnails = {};
+let thumbnailQueue = [];
+let activeThumbnailRequests = 0;
+let thumbnailRefreshInterval = null;
+let thumbnailQueueSet = new Set();
+const DEFAULT_THUMBNAIL_INTERVAL = 10; // seconds
 
 // DOM Elements - with null checks for missing elements
 const elements = {
@@ -150,6 +156,9 @@ const elements = {
   shortcutResetBtn: document.getElementById('shortcut-reset-btn'),
   shortcutExportBtn: document.getElementById('shortcut-export-btn'),
   shortcutImportBtn: document.getElementById('shortcut-import-btn')
+  refreshScenes: document.getElementById('refresh-scenes'),
+  thumbnailToggle: document.getElementById('thumbnail-toggle'),
+  thumbnailInterval: document.getElementById('thumbnail-interval')
 };
 
 // Preferences helpers
@@ -514,6 +523,24 @@ function setupEventListeners() {
       }
     });
   }
+  if (elements.refreshScenes) elements.refreshScenes.addEventListener('click', () => {
+    clearSceneThumbnails(true);
+    loadScenes();
+  });
+  if (elements.thumbnailToggle) elements.thumbnailToggle.addEventListener('change', () => {
+    saveSettings();
+    if (isThumbnailsEnabled()) {
+      startThumbnailRefresh();
+      refreshAllThumbnails(true);
+    } else {
+      stopThumbnailRefresh();
+      clearSceneThumbnails(false);
+    }
+  });
+  if (elements.thumbnailInterval) elements.thumbnailInterval.addEventListener('change', () => {
+    saveSettings();
+    startThumbnailRefresh();
+  });
 }
 
 // Connection Management Functions
@@ -707,7 +734,9 @@ function deleteCurrentConnection() {
 function saveSettings() {
   const settings = {
     host: elements.wsHost.value,
-    port: elements.wsPort.value
+    port: elements.wsPort.value,
+    thumbnailsEnabled: elements.thumbnailToggle ? elements.thumbnailToggle.checked : true,
+    thumbnailInterval: getThumbnailIntervalSeconds()
   };
   localStorage.setItem('obsSettings', JSON.stringify(settings));
 }
@@ -716,6 +745,14 @@ function loadSettings() {
   const settings = JSON.parse(localStorage.getItem('obsSettings') || '{}');
   if (settings.host) elements.wsHost.value = settings.host;
   if (settings.port) elements.wsPort.value = settings.port;
+  // Thumbnail preferences
+  if (elements.thumbnailToggle) {
+    elements.thumbnailToggle.checked = settings.thumbnailsEnabled !== false;
+  }
+  if (elements.thumbnailInterval) {
+    const interval = settings.thumbnailInterval || DEFAULT_THUMBNAIL_INTERVAL;
+    elements.thumbnailInterval.value = interval;
+  }
 }
 
 function clearAutoReconnectTimer() {
@@ -1030,9 +1067,11 @@ async function loadScenes() {
     scenes.reverse().forEach(scene => {
       const sceneItem = createSceneItem(scene.sceneName);
       elements.scenesList.appendChild(sceneItem);
+      queueSceneThumbnail(scene.sceneName);
     });
     
     updateActiveScene();
+    startThumbnailRefresh();
   } catch (error) {
     console.error('Failed to load scenes:', error);
     elements.scenesList.innerHTML = '<div class="empty-state">Failed to load scenes</div>';
@@ -1043,12 +1082,16 @@ function createSceneItem(sceneName) {
   const item = document.createElement('div');
   item.className = 'list-item';
   item.innerHTML = `
+    <div class="scene-thumbnail">
+      <div class="thumb-placeholder loading"><i class="fas fa-image"></i></div>
+    </div>
     <div class="list-item-label">
       <i class="fas fa-image list-item-icon"></i>
       <span>${sceneName}</span>
     </div>
   `;
   item.addEventListener('click', () => setScene(sceneName));
+  item.addEventListener('mouseenter', () => queueSceneThumbnail(sceneName, true));
   item.dataset.sceneName = sceneName;
   return item;
 }
@@ -1075,9 +1118,168 @@ async function setScene(sceneName) {
       // Refresh audio mixer when scene changes
       await loadAudioSources();
     }
+    queueSceneThumbnail(sceneName, true);
   } catch (error) {
     console.error('Failed to set scene:', error);
   }
+}
+
+// Scene thumbnails
+const THUMBNAIL_WIDTH = 240;
+const THUMBNAIL_HEIGHT = 135;
+const MAX_THUMBNAIL_REQUESTS = 2;
+
+function isThumbnailsEnabled() {
+  return elements.thumbnailToggle ? elements.thumbnailToggle.checked : true;
+}
+
+function getThumbnailIntervalSeconds() {
+  const raw = elements.thumbnailInterval ? parseInt(elements.thumbnailInterval.value, 10) : NaN;
+  if (!Number.isFinite(raw)) return DEFAULT_THUMBNAIL_INTERVAL;
+  return Math.min(120, Math.max(5, raw));
+}
+
+function getThumbnailIntervalMs() {
+  return getThumbnailIntervalSeconds() * 1000;
+}
+
+function stopThumbnailRefresh() {
+  if (thumbnailRefreshInterval) {
+    clearInterval(thumbnailRefreshInterval);
+    thumbnailRefreshInterval = null;
+  }
+}
+
+function startThumbnailRefresh() {
+  stopThumbnailRefresh();
+  if (!isThumbnailsEnabled()) return;
+  thumbnailRefreshInterval = setInterval(() => {
+    refreshAllThumbnails(false);
+  }, getThumbnailIntervalMs());
+}
+
+function refreshAllThumbnails(force = false) {
+  if (!isThumbnailsEnabled()) return;
+  document.querySelectorAll('#scenes-list .list-item').forEach(item => {
+    const sceneName = item.dataset.sceneName;
+    if (sceneName) {
+      queueSceneThumbnail(sceneName, force);
+    }
+  });
+}
+
+function clearSceneThumbnails(resetPlaceholders = false) {
+  sceneThumbnails = {};
+  thumbnailQueue = [];
+  activeThumbnailRequests = 0;
+  thumbnailQueueSet.clear();
+  if (resetPlaceholders) {
+    document.querySelectorAll('#scenes-list .scene-thumbnail').forEach(box => {
+      setThumbnailPlaceholder(box, true);
+    });
+  }
+}
+
+function setThumbnailPlaceholder(box, isLoading) {
+  if (!box) return;
+  const placeholder = document.createElement('div');
+  placeholder.className = 'thumb-placeholder' + (isLoading ? ' loading' : '');
+  const icon = document.createElement('i');
+  icon.className = 'fas fa-image';
+  placeholder.appendChild(icon);
+  box.replaceChildren(placeholder);
+}
+
+function queueSceneThumbnail(sceneName, force = false) {
+  if (!sceneName || !obs || !isThumbnailsEnabled()) return;
+  const now = Date.now();
+  const cadenceMs = getThumbnailIntervalMs();
+  const existing = sceneThumbnails[sceneName];
+  if (!force && existing) {
+    if (existing.status === 'loading') return;
+    if (existing.status === 'error' && existing.lastFail && now - existing.lastFail < cadenceMs) {
+      updateSceneThumbnail(sceneName);
+      return;
+    }
+    if (existing.status === 'loaded' && existing.updatedAt && now - existing.updatedAt < cadenceMs) {
+      updateSceneThumbnail(sceneName);
+      return;
+    }
+  }
+  sceneThumbnails[sceneName] = {
+    ...(existing || {}),
+    status: 'loading'
+  };
+  if (!thumbnailQueueSet.has(sceneName)) {
+    thumbnailQueueSet.add(sceneName);
+    thumbnailQueue.push(sceneName);
+  }
+  updateSceneThumbnail(sceneName);
+  processThumbnailQueue();
+}
+
+function processThumbnailQueue() {
+  while (activeThumbnailRequests < MAX_THUMBNAIL_REQUESTS && thumbnailQueue.length > 0) {
+    const sceneName = thumbnailQueue.shift();
+    if (!sceneName) continue;
+    thumbnailQueueSet.delete(sceneName);
+    activeThumbnailRequests++;
+    fetchSceneThumbnail(sceneName).finally(() => {
+      activeThumbnailRequests--;
+      processThumbnailQueue();
+    });
+  }
+}
+
+async function fetchSceneThumbnail(sceneName) {
+  try {
+    const { imageData } = await obs.call('GetSourceScreenshot', {
+      sourceName: sceneName,
+      imageFormat: 'jpeg',
+      imageCompressionQuality: 60,
+      imageWidth: THUMBNAIL_WIDTH,
+      imageHeight: THUMBNAIL_HEIGHT
+    });
+    const hasImage = !!imageData;
+    sceneThumbnails[sceneName] = {
+      status: hasImage ? 'loaded' : 'error',
+      data: hasImage ? imageData : null,
+      updatedAt: hasImage ? Date.now() : null,
+      lastFail: hasImage ? null : Date.now()
+    };
+  } catch (error) {
+    console.error('Thumbnail fetch failed for scene:', sceneName, error);
+    sceneThumbnails[sceneName] = {
+      status: 'error',
+      data: null,
+      updatedAt: null,
+      lastFail: Date.now()
+    };
+  }
+  updateSceneThumbnail(sceneName);
+}
+
+function updateSceneThumbnail(sceneName) {
+  const entry = sceneThumbnails[sceneName];
+  document.querySelectorAll('#scenes-list .list-item').forEach(item => {
+    if (item.dataset.sceneName !== sceneName) return;
+    const box = item.querySelector('.scene-thumbnail');
+    if (!box) return;
+    if (!isThumbnailsEnabled()) {
+      setThumbnailPlaceholder(box, false);
+      return;
+    }
+    if (entry && entry.status === 'loaded' && entry.data) {
+      const img = document.createElement('img');
+      img.src = `data:image/jpeg;base64,${entry.data}`;
+      img.alt = `${sceneName} thumbnail`;
+      box.replaceChildren(img);
+    } else if (entry && entry.status === 'loading') {
+      setThumbnailPlaceholder(box, true);
+    } else {
+      setThumbnailPlaceholder(box, false);
+    }
+  });
 }
 
 // Sources
@@ -1684,6 +1886,7 @@ async function switchSceneCollection(collectionName) {
     // Wait a moment for OBS to switch collections
     setTimeout(async () => {
       await loadSceneCollections();
+      clearSceneThumbnails(true);
       await loadScenes();
       await loadAudioSources();
     }, 500);
@@ -1727,6 +1930,7 @@ async function switchProfile(profileName) {
     // Wait a moment for OBS to switch profiles
     setTimeout(async () => {
       await loadProfiles();
+      clearSceneThumbnails(true);
       await loadScenes();
       await loadAudioSources();
     }, 500);
@@ -1758,6 +1962,8 @@ function resetUI() {
   elements.audioMixer.innerHTML = '<div class="empty-state">No audio sources available</div>';
   if (elements.collectionsList) elements.collectionsList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
   if (elements.profilesList) elements.profilesList.innerHTML = '<div class="empty-state">Not connected to OBS</div>';
+  clearSceneThumbnails(true);
+  stopThumbnailRefresh();
   
   elements.streamBtn.disabled = true;
   elements.recordBtn.disabled = true;
@@ -1788,6 +1994,7 @@ function clearIntervals() {
     clearInterval(syncInterval);
     syncInterval = null;
   }
+  stopThumbnailRefresh();
   
   Object.values(audioLevelIntervals).forEach(interval => clearInterval(interval));
   audioLevelIntervals = {};
