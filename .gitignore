@@ -20,5 +20,10 @@ Thumbs.db
 *.swo
 *~
 
+# MCP Configuration (may contain secrets)
+.github/mcp.json
+.vscode/mcp.json
+mcp-config.json
+
 # Electron
 out/
