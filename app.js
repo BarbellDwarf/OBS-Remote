@@ -48,7 +48,7 @@ const MIN_DB = -60;  // Minimum dB level (silent/very quiet)
 const MAX_DB = 0;    // Maximum dB level (peak/clipping)
 const DB_RANGE = MAX_DB - MIN_DB;  // Total dB range (60)
 const PEAK_THRESHOLD_DB = -5;  // dB level for peak indicator (red)
-const FILTER_CROP_MAX = 4000; // Upper bound aligns with typical HD/4K frame sizes
+const FILTER_CROP_MAX = 3840; // 4K UHD width; bounds typical HD/4K frame sizes
 
 let obs = null;
 let isConnected = false;
@@ -846,6 +846,7 @@ function createFilterControls(sourceName, filter, container) {
   
   const addNumberControl = (label, key, value, min, max, step, isInteger = false) => {
     hasControl = true;
+    let currentValue = value;
     const wrapper = document.createElement('label');
     wrapper.className = 'filter-control';
     const span = document.createElement('span');
@@ -860,12 +861,17 @@ function createFilterControls(sourceName, filter, container) {
     wrapper.appendChild(input);
     input.addEventListener('change', async (e) => {
       const raw = isInteger ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
-      if (Number.isNaN(raw)) return;
+      if (Number.isNaN(raw)) {
+        alert('Enter a valid number.');
+        e.target.value = currentValue;
+        return;
+      }
       const clamped = Math.max(min, Math.min(max, raw));
       if (clamped !== raw) {
         e.target.value = clamped;
       }
       await updateFilterSetting(sourceName, filter.filterName, { [key]: clamped }, container);
+      currentValue = clamped;
     });
     controls.appendChild(wrapper);
   };
